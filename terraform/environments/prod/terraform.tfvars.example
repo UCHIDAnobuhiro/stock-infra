@@ -1,0 +1,9 @@
+# このファイルを terraform.tfvars にコピーし、ローカルで実値へ置き換える。
+# terraform.tfvars は .gitignore 対象。
+project_id        = "replace-with-project-id"
+region            = "asia-northeast1"
+resource_prefix   = "stock"
+github_repository = "your-org/your-backend-repository"
+github_ref        = "refs/heads/main"
+db_name           = "app"
+db_user           = "appuser"

@@ -1,0 +1,44 @@
+# Terraform の生成物
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+
+# 環境固有値（*.example のみ公開する）
+*.tfvars
+!*.tfvars.example
+*.tfvars.json
+!*.tfvars.json.example
+backend.hcl
+*.local.tf
+!*.local.tf.example
+
+# ローカル上書き
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# 認証情報・秘密鍵
+.env
+.env.*
+!.env.example
+credentials.json
+application_default_credentials.json
+*service-account*.json
+*-credentials.json
+*.pem
+*.key
+*.p12
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# .terraform.lock.hcl は各 Terraform root でコミットする

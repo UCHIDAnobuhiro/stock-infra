@@ -1,0 +1,3 @@
+# backend.local.tf を作成した後、このファイルを backend.hcl にコピーして使用する。
+bucket = "replace-with-state-bucket-name"
+prefix = "bootstrap"

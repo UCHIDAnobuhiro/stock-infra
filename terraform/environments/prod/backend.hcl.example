@@ -1,0 +1,3 @@
+# bootstrap の output を参照して backend.hcl に実値を設定する。
+bucket = "replace-with-state-bucket-name"
+prefix = "prod"

@@ -1,0 +1,9 @@
+# このファイルを terraform.tfvars にコピーし、ローカルで実値へ置き換える。
+# terraform.tfvars は .gitignore 対象。
+project_id         = "replace-with-unique-project-id"
+project_name       = "Stock Portfolio"
+billing_account_id = "000000-000000-000000"
+organization_id    = null
+folder_id          = null
+region             = "asia-northeast1"
+state_bucket_name  = "replace-with-unique-state-bucket"

@@ -1,0 +1,5 @@
+# 初回 apply で state バケットを作成した後、backend.local.tf としてコピーする。
+# backend.local.tf は .gitignore 対象。
+terraform {
+  backend "gcs" {}
+}
