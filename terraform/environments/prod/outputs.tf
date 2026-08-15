@@ -47,11 +47,6 @@ output "cloud_run_job_names" {
   )
 }
 
-output "legacy_batch_job_names" {
-  description = "単一batch Jobへの移行後に削除する旧Cloud Run Job名"
-  value       = sort(keys(google_cloud_run_v2_job.batch))
-}
-
 output "redis_host" {
   description = "Memorystore のプライベートIP（Direct VPC egress 経由で到達）"
   value       = google_redis_instance.main.host

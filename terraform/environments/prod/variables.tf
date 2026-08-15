@@ -122,8 +122,3 @@ variable "enable_cloud_run" {
   default     = true
 }
 
-variable "retain_legacy_batch_jobs" {
-  description = "単一batch Jobへの移行中に旧candles/logo/auth-session-cleanup Jobsを保持するか。新規環境ではfalseにする"
-  type        = bool
-  default     = true
-}
