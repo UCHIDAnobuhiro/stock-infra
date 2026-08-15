@@ -18,6 +18,3 @@ api_max_instance_count = 3
 
 # 新規環境の初回applyではfalseにする。Secret versionと初回イメージを用意してからtrueへ変更する。
 enable_cloud_run = false
-
-# 旧3 Jobsからの移行時だけtrueにする。新規環境ではfalseのままにする。
-retain_legacy_batch_jobs = false
