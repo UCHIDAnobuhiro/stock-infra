@@ -73,7 +73,7 @@ variable "initial_api_image" {
 }
 
 variable "initial_batch_image" {
-  description = "Cloud Run batch Jobsの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
+  description = "Cloud Run batch Jobの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
   type        = string
 
   validation {
@@ -118,6 +118,12 @@ variable "api_max_instance_count" {
 
 variable "enable_cloud_run" {
   description = "Cloud Run Service / Jobsを作成するか。新規環境では基盤の初回apply後に有効化する"
+  type        = bool
+  default     = true
+}
+
+variable "retain_legacy_batch_jobs" {
+  description = "単一batch Jobへの移行中に旧candles/logo/auth-session-cleanup Jobsを保持するか。新規環境ではfalseにする"
   type        = bool
   default     = true
 }

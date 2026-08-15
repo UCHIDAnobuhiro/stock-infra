@@ -39,7 +39,26 @@ locals {
     },
   )
 
-  batch_jobs = {
+  batch_env = merge(local.common_env, {
+    CANDLES_CACHE_TTL            = "24h"
+    INGEST_MAX_FAILURE_RATE      = "0.2"
+    INGEST_TIMEOUT_HOURS         = "3"
+    LOGO_INGEST_MAX_FAILURE_RATE = "0.2"
+    LOGO_INGEST_TIMEOUT_HOURS    = "3"
+  })
+
+  batch_secret_env = merge(
+    local.database_secret_env,
+    local.redis_secret_env,
+    {
+      TWELVE_DATA_API_KEY  = "TWELVE_DATA_API_KEY"
+      TWELVE_DATA_BASE_URL = "TWELVE_DATA_BASE_URL"
+    },
+  )
+
+  # 単一batch Jobへの移行が完了するまで既存3 Jobsのstate addressを維持する。
+  # retain_legacy_batch_jobs=falseのapply後に、このlocalとlegacy resourceを削除する。
+  legacy_batch_jobs = {
     candles = {
       args        = ["candles"]
       timeout     = "10800s"
@@ -213,11 +232,12 @@ resource "google_cloud_run_v2_service_iam_member" "deployer" {
 }
 
 resource "google_cloud_run_v2_job" "batch" {
-  for_each = var.enable_cloud_run ? local.batch_jobs : {}
+  for_each = var.enable_cloud_run && var.retain_legacy_batch_jobs ? local.legacy_batch_jobs : {}
 
-  name                = each.key
-  location            = var.region
-  deletion_protection = true
+  name     = each.key
+  location = var.region
+  # 誤って作成した3 Jobsを次の移行フェーズで削除できるよう解除する。
+  deletion_protection = false
 
   template {
     task_count  = 1
@@ -288,7 +308,6 @@ resource "google_cloud_run_v2_job" "batch" {
   }
 
   lifecycle {
-    prevent_destroy = true
     ignore_changes = [
       template[0].template[0].containers[0].image,
     ]
@@ -307,6 +326,103 @@ resource "google_cloud_run_v2_job_iam_member" "batch_deployer" {
   project  = each.value.project
   location = each.value.location
   name     = each.value.name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_cloud_run_v2_job" "batch_single" {
+  count = var.enable_cloud_run ? 1 : 0
+
+  name                = "batch"
+  location            = var.region
+  deletion_protection = true
+
+  template {
+    task_count  = 1
+    parallelism = 1
+
+    template {
+      service_account = google_service_account.jobs_runner.email
+      timeout         = "10800s"
+      max_retries     = 1
+
+      containers {
+        name  = "batch"
+        image = var.initial_batch_image
+        args  = ["candles"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        dynamic "env" {
+          for_each = local.batch_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
+
+        dynamic "env" {
+          for_each = local.batch_secret_env
+          content {
+            name = env.key
+            value_source {
+              secret_key_ref {
+                secret  = local.all_secret_ids[env.value]
+                version = "latest"
+              }
+            }
+          }
+        }
+      }
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.main.connection_name]
+        }
+      }
+
+      # candles実行時にMemorystoreへ到達するため、単一Jobには常にDirect VPC egressを設定する。
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = data.google_compute_network.default.name
+          subnetwork = data.google_compute_subnetwork.default.name
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+    ]
+  }
+
+  depends_on = [
+    google_project_service.services["run.googleapis.com"],
+    google_secret_manager_secret_iam_member.jobs_accessor,
+    google_secret_manager_secret_version.managed,
+  ]
+}
+
+resource "google_cloud_run_v2_job_iam_member" "batch_single_deployer" {
+  count = var.enable_cloud_run ? 1 : 0
+
+  project  = google_cloud_run_v2_job.batch_single[0].project
+  location = google_cloud_run_v2_job.batch_single[0].location
+  name     = google_cloud_run_v2_job.batch_single[0].name
   role     = "roles/run.developer"
   member   = "serviceAccount:${google_service_account.deployer.email}"
 }

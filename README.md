@@ -49,6 +49,9 @@ CDと共有するのはコンテナイメージとServiceのtrafficだけであ�
 `lifecycle.ignore_changes` を設定します。これによりアプリケーションのリリース速度を保ちつつ、
 それ以外の設定driftをTerraform planで検出します。
 
+バッチは単一のCloud Run Job `batch` として構築し、`candles` / `logo` /
+`auth-session-cleanup` は実行時の `job_id` 引数で切り替えます。
+
 ## 主な設計判断
 
 ### bootstrapと本番リソースを分離

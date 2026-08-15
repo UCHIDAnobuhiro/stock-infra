@@ -31,7 +31,7 @@
 - IAM
 - GitHub Actions用Workload Identity Federation
 - Cloud Run APIサービス
-- Cloud Run batch / migrate Jobs
+- 単一のCloud Run batch Jobとmigrate Job
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
@@ -71,7 +71,7 @@ Artifact Registryへpushし、そのURIを `initial_*_image` 変数としてTerr
 
 - Cloud SQLはCloud Run組み込み接続を利用する
 - Redisはdefault VPC内に配置する
-- Redisを利用するAPIとcandles JobだけがDirect VPC egressを利用する
+- Redisを利用するAPIと、candlesを実行できる単一batch JobがDirect VPC egressを利用する
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
 
