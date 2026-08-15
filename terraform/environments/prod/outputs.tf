@@ -14,11 +14,6 @@ output "github_secret_gcp_project_id" {
   value       = var.project_id
 }
 
-output "github_secret_instance_connection_name" {
-  description = "INSTANCE_CONNECTION_NAME_FOR_DEPLOY に設定する値"
-  value       = google_sql_database_instance.main.connection_name
-}
-
 output "artifact_registry" {
   description = "コンテナイメージの push 先"
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.registry.repository_id}"
@@ -32,6 +27,24 @@ output "service_runner_email" {
 output "jobs_runner_email" {
   description = "バッチのランタイム SA"
   value       = google_service_account.jobs_runner.email
+}
+
+output "migrate_runner_email" {
+  description = "マイグレーションJobのランタイム SA"
+  value       = google_service_account.migrate_runner.email
+}
+
+output "cloud_run_service_uri" {
+  description = "APIのCloud Run URI"
+  value       = try(google_cloud_run_v2_service.api[0].uri, null)
+}
+
+output "cloud_run_job_names" {
+  description = "backend CDがイメージを更新するCloud Run Job名"
+  value = concat(
+    sort(keys(google_cloud_run_v2_job.batch)),
+    try([google_cloud_run_v2_job.migrate[0].name], []),
+  )
 }
 
 output "redis_host" {

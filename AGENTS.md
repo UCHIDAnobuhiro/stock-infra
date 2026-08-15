@@ -9,10 +9,12 @@
 | Terraform root | 責務 |
 |---|---|
 | `terraform/bootstrap` | GCPプロジェクト、前提API、Terraform stateバケット |
-| `terraform/environments/prod` | Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF、API有効化 |
-| GitHub Actions CD | Cloud RunサービスとCloud Run Jobsの作成・更新 |
+| `terraform/environments/prod` | Cloud Runサービス・Jobsとその設定、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF、API有効化 |
+| backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、traffic切替、Job実行 |
 
-Cloud Run本体をTerraformへ追加してはいけない。CDとTerraformの二重管理を避けるため、意図的に管理対象外としている。
+Cloud RunのイメージとServiceのtrafficだけはbackend CDが管理し、Terraformでは
+`lifecycle.ignore_changes` の対象とする。それ以外の環境変数、Secret参照、ネットワーク、
+リソース制限、ランタイムSA、Job引数をCDから変更してはいけない。
 
 ## 開発コマンド
 
@@ -69,7 +71,7 @@ Direct VPC egress、PITR無効、ディスク自動拡張無効、RedisのTLS無
 
 ### シークレットを追加する
 
-値の出どころを `secrets.tf` のA/B/Cへ分類する。外部APIキー等はsecret本体だけをTerraform管理し、versionは人間が安全な入力経路で追加する。IAMの `local.all_secret_ids` とCD側のsecret設定も合わせて確認する。
+値の出どころを `secrets.tf` のA/B/Cへ分類する。外部APIキー等はsecret本体だけをTerraform管理し、versionは人間が安全な入力経路で追加する。IAMの `local.all_secret_ids` と `cloud-run.tf` のSecret環境変数を合わせて確認する。
 
 ### GCP APIを追加する
 
