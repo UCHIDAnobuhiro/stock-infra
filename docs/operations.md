@@ -60,6 +60,9 @@ cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/b
 ```
 
 両ファイルへ実値を設定する。GitHubリポジトリは `owner/repo`、Git refは `refs/heads/main` のように指定する。
+`cors_allowed_origins` には本番frontendのHTTPS originを設定する。
+新規環境の初回applyでは `enable_cloud_run = false` にして、Secret Manager、WIF、
+Artifact Registry等の前提基盤を先に作成する。
 
 ```bash
 terraform -chdir=terraform/environments/prod init -backend-config=backend.hcl
@@ -88,7 +91,20 @@ gcloud secrets versions add TWELVE_DATA_API_KEY --data-file=-
 terraform -chdir=terraform/environments/prod output
 ```
 
-WIF Provider、デプロイ用サービスアカウント、GCPプロジェクトID、Cloud SQL接続名を対象リポジトリのRepository SecretsまたはVariablesへ設定する。実値をREADMEやissueへ貼り付けない。
+WIF Provider、デプロイ用サービスアカウント、GCPプロジェクトIDを対象リポジトリの
+Repository SecretsまたはVariablesへ設定する。Cloud SQL接続名やランタイムSAはbackend CDへ渡さない。
+実値をREADMEやissueへ貼り付けない。
+
+backendのAPI・batch・migrate CDを `publish_only=true` で実行する。GitHub ActionsのSummaryに
+表示されたcommit SHA付きURIを `initial_api_image`、`initial_batch_image`、
+`initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。
+
+再度Terraform planを確認して人間がapplyする。この段階ではAPIサービス1件、batch Jobs 3件、
+migrate Job 1件と関連IAMが追加される。初回作成後のイメージ更新はbackend CDが担当し、
+Terraformはイメージ差分を無視する。
+
+通常のbackend CDは既存Cloud Runリソースのイメージだけを更新する。デプロイ後に
+Terraform planを実行し、イメージとtraffic以外の差分がないことを確認する。
 
 ## 日常の変更
 

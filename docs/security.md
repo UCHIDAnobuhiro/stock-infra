@@ -35,11 +35,12 @@ stateファイルをGit、チャット、issue、CIログへ貼り付けない�
 
 ## IAM
 
-- API、バッチ、デプロイでサービスアカウントを分離する
+- API、バッチ、マイグレーション、デプロイでサービスアカウントを分離する
 - Secret Manager accessorはsecret単位で付与する
 - Artifact Registry writerはrepository単位で付与する
 - `serviceAccountUser` は対象サービスアカウント単位で付与する
 - ランタイムサービスアカウントへデプロイ権限を付与しない
+- デプロイ用サービスアカウントのCloud Run Developerは各Service / Job単位で付与し、プロジェクト全体のCloud Run Adminは付与しない
 
 ## Workload Identity Federation
 

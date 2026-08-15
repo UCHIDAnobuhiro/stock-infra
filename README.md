@@ -19,7 +19,7 @@
 flowchart LR
     GH["GitHub Actions"] -->|"OIDC / WIF"| DEPLOYER["Deploy service account"]
     DEPLOYER -->|"push"| AR["Artifact Registry"]
-    DEPLOYER -->|"deploy"| RUN["Cloud Run / Jobs"]
+    DEPLOYER -->|"update image / traffic"| RUN["Cloud Run / Jobs"]
     RUN -->|"runtime identity"| RUNTIME["Runtime service accounts"]
     RUNTIME --> SQL["Cloud SQL for PostgreSQL"]
     RUNTIME -->|"Direct VPC egress"| REDIS["Memorystore for Redis"]
@@ -32,6 +32,7 @@ flowchart LR
     TF --> RUNTIME
     TF --> DEPLOYER
     TF --> WIF["Workload Identity Federation"]
+    TF --> RUN
 ```
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
@@ -40,10 +41,13 @@ flowchart LR
 
 | 担当 | 管理対象 |
 |---|---|
-| Terraform | GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
-| GitHub Actions CD | Cloud RunサービスとCloud Run Jobsの作成・更新、コンテナイメージのデプロイ |
+| Terraform | Cloud Runサービス・Jobsとその設定、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
 
-Cloud Run本体はTerraformで管理しません。CDがイメージや環境変数を継続的に更新するため、Terraformにも同じリソースを持たせると大部分を `ignore_changes` にする必要があり、状態差分の意味が薄れるためです。
+Cloud Runの環境変数、Secret参照、ネットワーク、ランタイムSA、リソース制限、Job引数はTerraformで管理します。
+CDと共有するのはコンテナイメージとServiceのtrafficだけであり、この2属性に限定して
+`lifecycle.ignore_changes` を設定します。これによりアプリケーションのリリース速度を保ちつつ、
+それ以外の設定driftをTerraform planで検出します。
 
 ## 主な設計判断
 
@@ -57,7 +61,7 @@ GitHub ActionsからGCPへの認証にはWIFを利用します。長期間有効
 
 ### 最小権限IAM
 
-- APIとバッチでランタイムサービスアカウントを分離
+- API、バッチ、マイグレーションでランタイムサービスアカウントを分離
 - Secret Managerの参照権限はプロジェクト単位ではなくシークレット単位
 - Artifact Registryへの書き込みは対象リポジトリ単位
 - `serviceAccountUser` はデプロイで使用するランタイムサービスアカウント単位
@@ -128,7 +132,7 @@ terraform -chdir=terraform/environments/prod validate
 
 - Terraform 1.9以上
 - Google Cloud Provider 6.x
-- Google Cloud: Cloud SQL、Memorystore、Artifact Registry、Secret Manager、IAM、WIF
+- Google Cloud: Cloud Run、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、IAM、WIF
 - GitHub Actions / OpenID Connect
 
 ## 関連コンポーネント

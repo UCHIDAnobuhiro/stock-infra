@@ -7,3 +7,14 @@ github_repository = "your-org/your-backend-repository"
 github_ref        = "refs/heads/main"
 db_name           = "app"
 db_user           = "appuser"
+
+# backendリポジトリのpublish_only実行でpushした同一commit SHAのイメージを指定する。
+initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/backend:replace-with-git-sha"
+initial_batch_image   = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/batch:replace-with-git-sha"
+initial_migrate_image = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/migrate:replace-with-git-sha"
+
+cors_allowed_origins   = ["https://app.example.com"]
+api_max_instance_count = 3
+
+# 新規環境の初回applyではfalseにする。Secret versionと初回イメージを用意してからtrueへ変更する。
+enable_cloud_run = false

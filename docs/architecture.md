@@ -2,7 +2,7 @@
 
 ## スコープ
 
-このリポジトリはGCPプロジェクトのbootstrapと、アプリケーションが利用する本番マネージドサービスを管理する。アプリケーションコード、ローカル開発環境、Cloud Runの継続的なデプロイは対象外とする。
+このリポジトリはGCPプロジェクトのbootstrapと、Cloud Runを含むアプリケーションの本番基盤を管理する。アプリケーションコード、ローカル開発環境、コンテナイメージの継続的なデプロイは対象外とする。
 
 ## Terraform root
 
@@ -30,6 +30,9 @@
 - ランタイム・デプロイ用サービスアカウント
 - IAM
 - GitHub Actions用Workload Identity Federation
+- Cloud Run APIサービス
+- Cloud Run batch / migrate Jobs
+- Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
 
@@ -48,21 +51,27 @@ sequenceDiagram
     WIF->>WIF: repository と ref を検証
     WIF->>SA: 短期認証情報を発行
     SA->>AR: コンテナイメージをpush
-    SA->>RUN: サービスまたはJobをdeploy
+    SA->>RUN: 既存サービスまたはJobのimageを更新
     RUN->>SM: ランタイムSAでsecretを取得
     RUN->>SQL: Cloud SQL接続を使用
     RUN->>REDIS: Direct VPC egressで接続
 ```
 
-## Cloud RunをTerraform管理しない理由
+## Cloud Runの共同管理境界
 
-Cloud RunはGitHub Actionsがコンテナイメージ、環境変数、secret参照を更新する。Terraformでも同じサービスを管理すると変更主体が二つになり、イメージ等を `ignore_changes` にする範囲が広がる。結果としてplanのdrift検出能力が低下するため、作成・更新をCDに集約する。
+TerraformはCloud Runリソースを作成し、環境変数、Secret参照、ネットワーク、リソース制限、
+ランタイムSA、Job引数を継続管理する。backend CDはcommit SHA付きイメージの更新と、
+APIのtraffic切替、Job実行だけを担当する。TerraformではコンテナイメージとServiceのtrafficだけを
+`ignore_changes` とし、それ以外の設定driftを検出する。
+
+Cloud Runは作成時にイメージが必要なため、初回だけbackend CDを `publish_only` で実行して
+Artifact Registryへpushし、そのURIを `initial_*_image` 変数としてTerraformへ渡す。
 
 ## ネットワーク
 
 - Cloud SQLはCloud Run組み込み接続を利用する
 - Redisはdefault VPC内に配置する
-- Cloud RunからRedisへはDirect VPC egressを利用する
+- Redisを利用するAPIとcandles JobだけがDirect VPC egressを利用する
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
 

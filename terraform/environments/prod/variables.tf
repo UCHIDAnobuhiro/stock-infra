@@ -61,3 +61,63 @@ variable "twelve_data_base_url" {
   type        = string
   default     = "https://api.twelvedata.com"
 }
+
+variable "initial_api_image" {
+  description = "Cloud Run APIの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
+  type        = string
+
+  validation {
+    condition     = trimspace(var.initial_api_image) != ""
+    error_message = "initial_api_image は空にできません。"
+  }
+}
+
+variable "initial_batch_image" {
+  description = "Cloud Run batch Jobsの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
+  type        = string
+
+  validation {
+    condition     = trimspace(var.initial_batch_image) != ""
+    error_message = "initial_batch_image は空にできません。"
+  }
+}
+
+variable "initial_migrate_image" {
+  description = "Cloud Run migrate Jobの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
+  type        = string
+
+  validation {
+    condition     = trimspace(var.initial_migrate_image) != ""
+    error_message = "initial_migrate_image は空にできません。"
+  }
+}
+
+variable "cors_allowed_origins" {
+  description = "APIがCORSで許可する本番originの一覧"
+  type        = list(string)
+
+  validation {
+    condition = (
+      length(var.cors_allowed_origins) > 0 &&
+      alltrue([for origin in var.cors_allowed_origins : can(regex("^https://", origin))])
+    )
+    error_message = "cors_allowed_origins はhttps://で始まるoriginを1件以上指定してください。"
+  }
+}
+
+variable "api_max_instance_count" {
+  description = "Cloud Run APIの最大インスタンス数"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.api_max_instance_count >= 1
+    error_message = "api_max_instance_count は1以上にしてください。"
+  }
+}
+
+variable "enable_cloud_run" {
+  description = "Cloud Run Service / Jobsを作成するか。新規環境では基盤の初回apply後に有効化する"
+  type        = bool
+  default     = true
+}
