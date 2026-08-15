@@ -99,12 +99,36 @@ backendのAPI・batch・migrate CDを `publish_only=true` で実行する。GitH
 表示されたcommit SHA付きURIを `initial_api_image`、`initial_batch_image`、
 `initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。
 
-再度Terraform planを確認して人間がapplyする。この段階ではAPIサービス1件、batch Jobs 3件、
-migrate Job 1件と関連IAMが追加される。初回作成後のイメージ更新はbackend CDが担当し、
+新規環境では `retain_legacy_batch_jobs = false` にしたうえで、再度Terraform planを確認して
+人間がapplyする。この段階ではAPIサービス1件、単一のbatch Job、migrate Job 1件と関連IAMが
+追加される。初回作成後のイメージ更新はbackend CDが担当し、
 Terraformはイメージ差分を無視する。
 
 通常のbackend CDは既存Cloud Runリソースのイメージだけを更新する。デプロイ後に
 Terraform planを実行し、イメージとtraffic以外の差分がないことを確認する。
+
+## 旧バッチJobsから単一Jobへの移行
+
+`candles`、`logo`、`auth-session-cleanup` の3 Jobsが既にTerraform stateへ登録されている環境は、
+削除保護を安全に解除するため2段階で移行する。
+
+1. `retain_legacy_batch_jobs = true` のままplanし、新しい `batch` Jobの追加と旧3 Jobsの
+   `deletion_protection = false` への変更だけであることを確認して、人間がapplyする
+2. backendのbatch CDを `publish_only=false`、`execute=false` で実行し、単一 `batch` Jobの
+   イメージを更新する
+3. `retain_legacy_batch_jobs = false` に変更してplanし、削除対象が旧3 JobsとそのIAMだけである
+   ことを確認して、人間がapplyする
+4. `terraform output legacy_batch_job_names` が空であることを確認する
+
+単一Jobのバッチ実行はbackendのbatch CDで `execute=true` と `job_id` を指定するか、次のように
+実行時引数を上書きする。
+
+```bash
+gcloud run jobs execute batch \
+  --region asia-northeast1 \
+  --args=candles \
+  --wait
+```
 
 ## 日常の変更
 

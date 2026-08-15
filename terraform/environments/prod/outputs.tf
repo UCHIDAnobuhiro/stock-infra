@@ -42,9 +42,14 @@ output "cloud_run_service_uri" {
 output "cloud_run_job_names" {
   description = "backend CDがイメージを更新するCloud Run Job名"
   value = concat(
-    sort(keys(google_cloud_run_v2_job.batch)),
+    try([google_cloud_run_v2_job.batch_single[0].name], []),
     try([google_cloud_run_v2_job.migrate[0].name], []),
   )
+}
+
+output "legacy_batch_job_names" {
+  description = "単一batch Jobへの移行後に削除する旧Cloud Run Job名"
+  value       = sort(keys(google_cloud_run_v2_job.batch))
 }
 
 output "redis_host" {
