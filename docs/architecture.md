@@ -32,6 +32,7 @@
 - GitHub Actions用Workload Identity Federation
 - Cloud Run APIサービス
 - 単一のCloud Run batch Jobとmigrate Job
+- batch Jobを定期実行するCloud Scheduler
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
@@ -66,6 +67,30 @@ APIのtraffic切替、Job実行だけを担当する。Terraformではコンテ�
 
 Cloud Runは作成時にイメージが必要なため、初回だけbackend CDを `publish_only` で実行して
 Artifact Registryへpushし、そのURIを `initial_*_image` 変数としてTerraformへ渡す。
+
+## 定期実行（Cloud Scheduler）
+
+candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTに、Cloud SchedulerがCloud Run Admin API v2の
+`projects.locations.jobs.run` をHTTPターゲットとして呼び出し、単一batch Jobの実行を起動する。
+
+```mermaid
+sequenceDiagram
+    participant SCHED as Cloud Scheduler
+    participant RUN as Cloud Run Admin API (v2)
+    participant JOB as batch Job execution
+
+    SCHED->>SCHED: scheduler SAのOAuthトークンを取得
+    SCHED->>RUN: POST .../jobs/batch:run (overrides.containerOverrides[].args)
+    RUN->>JOB: job_id引数でExecutionを起動
+    JOB->>JOB: jobs_runner SAとしてcandles/logoを実行
+```
+
+scheduler SAには対象Job単位で `roles/run.jobsExecutorWithOverrides` を付与する。
+`roles/run.invoker` にはJob実行時の上書き権限（`run.jobs.runWithOverrides`）が含まれないため使用しない。
+
+Cloud SchedulerのHTTP呼び出しはExecutionの起動をキューイングして即座に応答するため、
+Job本体のtimeout（10800秒）とは独立した短い `attempt_deadline` を設定する。
+backend CDや `gcloud run jobs execute` による手動実行とは独立したトリガーであり、互いを待ち合わせない。
 
 ## ネットワーク
 

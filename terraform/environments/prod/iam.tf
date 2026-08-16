@@ -19,6 +19,11 @@ resource "google_service_account" "deployer" {
   display_name = "GitHub Actions deployer (WIF)"
 }
 
+resource "google_service_account" "scheduler" {
+  account_id   = "${var.resource_prefix}-scheduler"
+  display_name = "Cloud Scheduler caller for batch Job"
+}
+
 # --- ランタイム SA のプロジェクトレベルロール ---
 resource "google_project_iam_member" "service_runner_cloudsql" {
   project = var.project_id

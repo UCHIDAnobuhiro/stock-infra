@@ -35,12 +35,15 @@ stateファイルをGit、チャット、issue、CIログへ貼り付けない�
 
 ## IAM
 
-- API、バッチ、マイグレーション、デプロイでサービスアカウントを分離する
+- API、バッチ、マイグレーション、デプロイ、Cloud Scheduler呼び出しでサービスアカウントを分離する
 - Secret Manager accessorはsecret単位で付与する
 - Artifact Registry writerはrepository単位で付与する
 - `serviceAccountUser` は対象サービスアカウント単位で付与する
 - ランタイムサービスアカウントへデプロイ権限を付与しない
 - デプロイ用サービスアカウントのCloud Run Developerは各Service / Job単位で付与し、プロジェクト全体のCloud Run Adminは付与しない
+- Cloud SchedulerのJob起動SAには対象Job単位で最小限のCloud Run固有ロール（`roles/run.jobsExecutor`系）のみ付与し、
+  上書き実行が必要なJobにのみ `run.jobs.runWithOverrides` を含むロールを与える。`roles/run.developer` のような
+  Job定義自体を変更できるロールは与えない
 
 ## Workload Identity Federation
 

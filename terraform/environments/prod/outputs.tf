@@ -34,6 +34,11 @@ output "migrate_runner_email" {
   value       = google_service_account.migrate_runner.email
 }
 
+output "scheduler_email" {
+  description = "Cloud SchedulerがbatchJobを起動する際に使うSA"
+  value       = google_service_account.scheduler.email
+}
+
 output "cloud_run_service_uri" {
   description = "APIのCloud Run URI"
   value       = try(google_cloud_run_v2_service.api[0].uri, null)
