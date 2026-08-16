@@ -31,6 +31,7 @@
 - IAM
 - GitHub Actions用Workload Identity Federation
 - Cloud Run APIサービス
+- API独自ドメイン用の外部Application Load Balancer、固定IP、Google管理TLS証明書
 - 単一のCloud Run batch Jobとmigrate Job
 - batch Jobを定期実行するCloud Scheduler
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
@@ -67,6 +68,29 @@ APIのtraffic切替、Job実行だけを担当する。Terraformではコンテ�
 
 Cloud Runは作成時にイメージが必要なため、初回だけbackend CDを `publish_only` で実行して
 Artifact Registryへpushし、そのURIを `initial_*_image` 変数としてTerraformへ渡す。
+
+## APIの公開経路
+
+```mermaid
+flowchart LR
+    CLIENT["API client"] -->|"HTTPS"| DNS["API custom domain"]
+    DNS --> IP["Global static IPv4"]
+    IP --> LB["External Application Load Balancer"]
+    LB -->|"Serverless NEG"| RUN["Cloud Run backend"]
+    CM["Certificate Manager"] -->|"Google-managed TLS certificate"| LB
+    DNSP["DNS provider"] -->|"A / certificate authorization CNAME"| DNS
+```
+
+外部Application Load BalancerはHTTPをHTTPSへリダイレクトし、TLS 1.2以上で通信を終端する。
+証明書はCertificate ManagerのDNS認証で発行・更新する。DNSのAレコードと認証用CNAMEは
+Terraform outputを正とし、DNS事業者側で人間が登録する。
+
+切り替えは次の2段階で行う。
+
+1. `enable_api_domain = true` でロードバランサーを作成し、Cloud Runの直接公開は維持する
+2. DNS、証明書、HTTPS疎通を確認後、`restrict_api_to_load_balancer = true` で外部通信をロードバランサー経由に限定する
+
+固定IPはDNSの参照先であるため `prevent_destroy` で誤削除を防ぐ。
 
 ## 定期実行（Cloud Scheduler）
 

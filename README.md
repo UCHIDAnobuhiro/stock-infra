@@ -20,6 +20,8 @@ flowchart LR
     GH["GitHub Actions"] -->|"OIDC / WIF"| DEPLOYER["Deploy service account"]
     DEPLOYER -->|"push"| AR["Artifact Registry"]
     DEPLOYER -->|"update image / traffic"| RUN["Cloud Run / Jobs"]
+    CLIENT["API client"] -->|"HTTPS"| LB["External Application Load Balancer"]
+    LB -->|"Serverless NEG"| RUN
     RUN -->|"runtime identity"| RUNTIME["Runtime service accounts"]
     RUNTIME --> SQL["Cloud SQL for PostgreSQL"]
     RUNTIME -->|"Direct VPC egress"| REDIS["Memorystore for Redis"]
@@ -34,6 +36,7 @@ flowchart LR
     TF --> DEPLOYER
     TF --> WIF["Workload Identity Federation"]
     TF --> RUN
+    TF --> LB
     TF --> SCHED
 ```
 
@@ -43,7 +46,8 @@ flowchart LR
 
 | 担当 | 管理対象 |
 |---|---|
-| Terraform | Cloud Runサービス・Jobsとその設定、Cloud Scheduler、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| Terraform | Cloud Runサービス・Jobsとその設定、API独自ドメイン用ロードバランサー・証明書、Cloud Scheduler、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| DNS事業者 | Terraform outputが示すAレコードと証明書認証用CNAMEの登録 |
 | backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
 
 Cloud Runの環境変数、Secret参照、ネットワーク、ランタイムSA、リソース制限、Job引数はTerraformで管理します。
@@ -73,6 +77,13 @@ GitHub ActionsからGCPへの認証にはWIFを利用します。長期間有効
 - Secret Managerの参照権限はプロジェクト単位ではなくシークレット単位
 - Artifact Registryへの書き込みは対象リポジトリ単位
 - `serviceAccountUser` はデプロイで使用するランタイムサービスアカウント単位
+
+### APIの独自ドメイン
+
+APIの独自ドメインは、固定グローバルIPv4、外部Application Load Balancer、
+Serverless NEG、Certificate ManagerのGoogle管理証明書で構成します。
+DNSと証明書の疎通確認後にCloud Runのingressをロードバランサー経由へ限定し、
+切り替え中の到達性を維持します。実ドメインはローカルの `terraform.tfvars` にだけ保存します。
 
 ### コストと可用性のトレードオフ
 
@@ -140,7 +151,7 @@ terraform -chdir=terraform/environments/prod validate
 
 - Terraform 1.9以上
 - Google Cloud Provider 6.x
-- Google Cloud: Cloud Run、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、IAM、WIF
+- Google Cloud: Cloud Run、Cloud Load Balancing、Certificate Manager、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、IAM、WIF
 - GitHub Actions / OpenID Connect
 
 ## 関連コンポーネント

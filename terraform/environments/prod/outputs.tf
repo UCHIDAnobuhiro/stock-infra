@@ -44,6 +44,32 @@ output "cloud_run_service_uri" {
   value       = try(google_cloud_run_v2_service.api[0].uri, null)
 }
 
+output "api_base_url" {
+  description = "APIの独自ドメインURL。enable_api_domain=falseの場合はnull"
+  value       = local.api_domain_enabled ? "https://${var.api_domain}" : null
+}
+
+output "api_load_balancer_ipv4" {
+  description = "API外部HTTPSロードバランサーの固定IPv4。enable_api_domain=falseの場合はnull"
+  value       = try(google_compute_global_address.api[0].address, null)
+}
+
+output "api_dns_records" {
+  description = "DNS事業者へ登録するAPIのAレコードと証明書認証用CNAME"
+  value = local.api_domain_enabled ? {
+    api = {
+      name = var.api_domain
+      type = "A"
+      data = google_compute_global_address.api[0].address
+    }
+    certificate_authorization = {
+      name = google_certificate_manager_dns_authorization.api[0].dns_resource_record[0].name
+      type = google_certificate_manager_dns_authorization.api[0].dns_resource_record[0].type
+      data = google_certificate_manager_dns_authorization.api[0].dns_resource_record[0].data
+    }
+  } : null
+}
+
 output "cloud_run_job_names" {
   description = "backend CDがイメージを更新するCloud Run Job名"
   value = concat(

@@ -62,7 +62,8 @@ cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/b
 両ファイルへ実値を設定する。GitHubリポジトリは `owner/repo`、Git refは `refs/heads/main` のように指定する。
 `cors_allowed_origins` には本番frontendのHTTPS originを設定する。
 新規環境の初回applyでは `enable_cloud_run = false` にして、Secret Manager、WIF、
-Artifact Registry等の前提基盤を先に作成する。
+Artifact Registry等の前提基盤を先に作成する。`enable_api_domain` もこの段階では
+`false` のままにする。
 
 ```bash
 terraform -chdir=terraform/environments/prod init -backend-config=backend.hcl
@@ -125,6 +126,61 @@ gcloud scheduler jobs describe candles-daily --location asia-northeast1
 gcloud scheduler jobs run candles-daily --location asia-northeast1
 gcloud run jobs executions list --job batch --region asia-northeast1
 ```
+
+## 7. API独自ドメインの設定
+
+Cloud Run APIがデフォルトURIで正常に応答することを確認してから、ローカルの
+`terraform.tfvars` に次を設定する。実ドメインはexample、README、issueへ記載しない。
+
+```hcl
+enable_api_domain             = true
+api_domain                    = "api.example.com"
+restrict_api_to_load_balancer = false
+```
+
+初回は `restrict_api_to_load_balancer = false` を維持する。次を実行し、固定IP、
+Serverless NEG、ロードバランサー、証明書だけが追加されることを確認する。
+
+```bash
+terraform -chdir=terraform/environments/prod plan
+```
+
+`must be replaced` や既存リソースの削除があれば中止する。人間がplanを確認してapplyした後、
+DNS事業者へ登録する値を取得する。
+
+```bash
+terraform -chdir=terraform/environments/prod output -json api_dns_records
+```
+
+outputの `api` をAレコード、`certificate_authorization` をCNAMEレコードとして
+DNS事業者へ登録する。DNS画面がホスト名のみを求める場合はゾーン名との重複を避ける。
+既存のMX、TXT、無関係なA/CNAMEレコードは変更しない。
+
+DNS反映と証明書発行後に次を確認する。
+
+```bash
+dig +short api.example.com A
+dig +short _acme-challenge.api.example.com CNAME
+gcloud certificate-manager certificates describe <resource-prefix>-api-certificate --location=global
+curl -fsS https://api.example.com/healthz
+curl -I http://api.example.com/healthz
+```
+
+CNAMEのホスト名は固定せず、`api_dns_records` の実際のoutputに合わせる。
+HTTPSがhealth checkに成功し、HTTPがHTTPSへリダイレクトされることを確認する。
+
+疎通確認後に次へ変更する。
+
+```hcl
+restrict_api_to_load_balancer = true
+```
+
+再度planを確認し、Cloud Runのingress以外に意図しない差分がないことを確認してから
+人間がapplyする。独自ドメインが引き続き応答し、インターネットからCloud RunのデフォルトURIへ
+直接アクセスできないことを確認する。
+
+切り替え後にロードバランサー経路の障害が発生した場合は、ロードバランサーやDNSを削除せず、
+`restrict_api_to_load_balancer = false` へ戻すplanを確認して人間がapplyする。
 
 ## 日常の変更
 
