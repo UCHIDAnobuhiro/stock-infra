@@ -2,7 +2,7 @@
 
 株式情報アプリケーションの本番GCP基盤を、Terraformで再現可能に構築するためのInfrastructure as Codeリポジトリです。
 
-> Status: 新規GCPプロジェクトへの構築準備中です。このリポジトリには実環境の識別子や認証情報を含めていません。
+> Status: 本番GCP基盤を構築済みです。このリポジトリには実環境の識別子や認証情報を含めていません。
 
 ## このリポジトリで示すこと
 
@@ -83,7 +83,9 @@ GitHub ActionsからGCPへの認証にはWIFを利用します。長期間有効
 APIの独自ドメインは、固定グローバルIPv4、外部Application Load Balancer、
 Serverless NEG、Certificate ManagerのGoogle管理証明書で構成します。
 DNSと証明書の疎通確認後にCloud Runのingressをロードバランサー経由へ限定し、
-切り替え中の到達性を維持します。実ドメインはローカルの `terraform.tfvars` にだけ保存します。
+切り替え中の到達性を維持します。証明書が `ACTIVE` になるまではCloud Runの直接公開を
+維持し、独自ドメインのHTTPS疎通後に入口を制限します。実ドメインはローカルの
+`terraform.tfvars` にだけ保存します。
 
 ### コストと可用性のトレードオフ
 

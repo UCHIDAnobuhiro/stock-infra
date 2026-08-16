@@ -84,13 +84,19 @@ flowchart LR
 外部Application Load BalancerはHTTPをHTTPSへリダイレクトし、TLS 1.2以上で通信を終端する。
 証明書はCertificate ManagerのDNS認証で発行・更新する。DNSのAレコードと認証用CNAMEは
 Terraform outputを正とし、DNS事業者側で人間が登録する。
+認証用CNAMEは証明書の自動更新にも使うため、初回発行後も削除しない。
+
+Serverless NEGをbackendに持つBackend Serviceは `timeout_sec` をサポートしない。
+リクエストタイムアウトはCloud Run Service側で管理し、Backend Serviceに重複設定しない。
 
 切り替えは次の2段階で行う。
 
 1. `enable_api_domain = true` でロードバランサーを作成し、Cloud Runの直接公開は維持する
-2. DNS、証明書、HTTPS疎通を確認後、`restrict_api_to_load_balancer = true` で外部通信をロードバランサー経由に限定する
+2. DNS反映、証明書の `ACTIVE`、HTTPS疎通を確認後、`restrict_api_to_load_balancer = true` で外部通信をロードバランサー経由に限定する
 
-固定IPはDNSの参照先であるため `prevent_destroy` で誤削除を防ぐ。
+固定IPはDNSの参照先であるため `prevent_destroy` で誤削除を防ぐ。切り替え後は
+独自ドメイン経由の応答と、インターネットからのCloud RunデフォルトURIが拒否されることの
+両方を確認する。
 
 ## 定期実行（Cloud Scheduler）
 
