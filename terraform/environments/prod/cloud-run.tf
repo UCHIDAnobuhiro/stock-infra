@@ -17,19 +17,36 @@ locals {
     REDIS_PORT     = "REDIS_PORT"
   }
 
-  api_env = merge(local.common_env, {
-    CANDLES_CACHE_TTL         = "24h"
-    COOKIE_DOMAIN             = var.cookie_domain
-    COOKIE_SECURE             = "true"
-    CORS_ALLOWED_ORIGINS      = join(",", var.cors_allowed_origins)
-    DB_CONN_MAX_LIFETIME      = "5m"
-    DB_MAX_IDLE_CONNS         = "25"
-    DB_MAX_OPEN_CONNS         = "25"
-    GOOGLE_CLOUD_LOCATION     = var.region
-    GOOGLE_CLOUD_PROJECT      = var.project_id
-    GOOGLE_GENAI_USE_VERTEXAI = "true"
-    TRUSTED_PROXY_HOPS        = "1"
-  })
+  oauth_env = var.enable_oauth ? {
+    GITHUB_REDIRECT_URL         = "https://${var.api_domain}/v1/auth/oauth/github/callback"
+    GOOGLE_REDIRECT_URL         = "https://${var.api_domain}/v1/auth/oauth/google/callback"
+    OAUTH_FRONTEND_REDIRECT_URL = var.oauth_frontend_redirect_url
+  } : {}
+
+  oauth_secret_env = var.enable_oauth ? {
+    GITHUB_CLIENT_ID     = "GITHUB_CLIENT_ID"
+    GITHUB_CLIENT_SECRET = "GITHUB_CLIENT_SECRET"
+    GOOGLE_CLIENT_ID     = "GOOGLE_CLIENT_ID"
+    GOOGLE_CLIENT_SECRET = "GOOGLE_CLIENT_SECRET"
+  } : {}
+
+  api_env = merge(
+    local.common_env,
+    local.oauth_env,
+    {
+      CANDLES_CACHE_TTL         = "24h"
+      COOKIE_DOMAIN             = var.cookie_domain
+      COOKIE_SECURE             = "true"
+      CORS_ALLOWED_ORIGINS      = join(",", var.cors_allowed_origins)
+      DB_CONN_MAX_LIFETIME      = "5m"
+      DB_MAX_IDLE_CONNS         = "25"
+      DB_MAX_OPEN_CONNS         = "25"
+      GOOGLE_CLOUD_LOCATION     = var.region
+      GOOGLE_CLOUD_PROJECT      = var.project_id
+      GOOGLE_GENAI_USE_VERTEXAI = "true"
+      TRUSTED_PROXY_HOPS        = "1"
+    },
+  )
 
   api_secret_env = merge(
     local.database_secret_env,
@@ -38,6 +55,7 @@ locals {
       JWT_SECRET      = "JWT_SECRET"
       PASSWORD_PEPPER = "PASSWORD_PEPPER"
     },
+    local.oauth_secret_env,
   )
 
   batch_env = merge(local.common_env, {

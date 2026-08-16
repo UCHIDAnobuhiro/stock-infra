@@ -76,15 +76,38 @@ terraform -chdir=terraform/environments/prod plan
 
 planに `must be replaced` や想定外のIAM変更がないことを確認し、人間がapplyする。
 
-## 5. 外部APIキーの投入
+## 5. 外部credentialの投入
 
-Terraformは外部APIキーのsecret本体だけを作成する。値はapply後にSecret Managerへ追加する。
+Terraformは外部APIキーとOAuth credentialのsecret本体だけを作成する。値はapply後にSecret Managerへ追加する。
 
 ```bash
 gcloud secrets versions add TWELVE_DATA_API_KEY --data-file=-
 ```
 
 コマンド実行後に標準入力から値を入力する。値をコマンド引数、ファイル、シェル履歴へ残さない。
+
+### OAuthを有効化する場合
+
+最初は `enable_oauth = false` のままapplyし、OAuth credential用のsecret本体を作成する。
+作成後、Google/GitHubで発行した値を対応するsecretへ投入する。
+
+```bash
+gcloud secrets versions add GOOGLE_CLIENT_ID --data-file=-
+gcloud secrets versions add GOOGLE_CLIENT_SECRET --data-file=-
+gcloud secrets versions add GITHUB_CLIENT_ID --data-file=-
+gcloud secrets versions add GITHUB_CLIENT_SECRET --data-file=-
+```
+
+各コマンドの実行後、値を貼り付けた直後にEnterを押さず `Ctrl-D` で入力を終了する。
+4つすべてにversionが作成されたことを確認してから、`terraform.tfvars`へ次を設定する。
+
+```hcl
+enable_oauth                = true
+oauth_frontend_redirect_url = "https://www.example.com"
+```
+
+再度planを実行し、Cloud Run APIへのOAuth環境変数・Secret参照と、APIランタイムSAへの
+4つのSecret Manager accessor追加だけであることを確認してからapplyする。
 
 ## 6. CD設定
 

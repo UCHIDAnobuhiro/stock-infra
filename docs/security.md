@@ -29,7 +29,7 @@ stateファイルをGit、チャット、issue、CIログへ貼り付けない�
 |---|---|---|
 | A: 生成値 | JWT署名鍵、password pepper、DBパスワード | Terraformで生成しSecret Managerへ保存 |
 | B: 導出値 | DB接続名、Redis接続情報 | Terraformリソースから導出しSecret Managerへ保存 |
-| C: 外部値 | 外部APIキー | secret本体のみTerraformで作り、値は人間が手動投入 |
+| C: 外部値 | 外部APIキー、OAuth Client ID / Client Secret | secret本体のみTerraformで作り、値は人間が手動投入 |
 
 分類Cの値は `.tf`、`.tfvars`、シェル履歴へ残さない入力方法を使用する。
 

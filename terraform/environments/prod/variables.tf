@@ -118,6 +118,36 @@ variable "cookie_domain" {
   }
 }
 
+variable "enable_oauth" {
+  description = "Google/GitHub OAuthをCloud Run APIで有効化するか"
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.enable_oauth || (
+      var.enable_cloud_run &&
+      var.enable_api_domain &&
+      var.api_domain != "" &&
+      var.oauth_frontend_redirect_url != ""
+    )
+    error_message = "enable_oauth を有効にする場合はCloud RunとAPI独自ドメインを有効化し、oauth_frontend_redirect_urlを設定してください。"
+  }
+}
+
+variable "oauth_frontend_redirect_url" {
+  description = "OAuth認証完了後に戻すfrontendのHTTPS origin。末尾スラッシュを含めない"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.oauth_frontend_redirect_url == "" ||
+      can(regex("^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$", var.oauth_frontend_redirect_url))
+    )
+    error_message = "oauth_frontend_redirect_url は空文字か、末尾スラッシュを含まないHTTPS originにしてください。"
+  }
+}
+
 variable "enable_api_domain" {
   description = "API独自ドメイン用の外部HTTPSロードバランサーを作成するか。Cloud Run作成後に有効化する"
   type        = bool
