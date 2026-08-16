@@ -66,6 +66,12 @@ resource "google_cloud_run_v2_service" "api" {
   ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = true
 
+  # サービス全体のscaling設定。テンプレート単位のscalingとは別枠でCloud Run v2 APIが
+  # 常に値を返すため、未指定のままだとAPI側のデフォルト応答とplanが毎回差分を出す。
+  scaling {
+    scaling_mode = "AUTOMATIC"
+  }
+
   template {
     service_account = google_service_account.service_runner.email
     timeout         = "300s"
