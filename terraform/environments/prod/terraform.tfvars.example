@@ -23,5 +23,9 @@ enable_api_domain             = false
 api_domain                    = "api.example.com"
 restrict_api_to_load_balancer = false
 
+# OAuth credentialのSecret versionを投入してからtrueへ変更する。
+enable_oauth                        = false
+oauth_frontend_redirect_url         = "https://www.example.com"
+
 # 新規環境の初回applyではfalseにする。Secret versionと初回イメージを用意してからtrueへ変更する。
 enable_cloud_run = false

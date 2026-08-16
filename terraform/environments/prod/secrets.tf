@@ -1,7 +1,7 @@
 # Secret Manager の値は3分類で管理する。
 #   A. Terraform が生成し version まで管理（JWT_SECRET / PASSWORD_PEPPER / DB_PASSWORD）
 #   B. Terraform がリソース属性から導出し version まで管理（接続情報など）
-#   C. secret 本体のみ Terraform 管理し、外部APIキー等の値は手動投入
+#   C. secret 本体のみ Terraform 管理し、外部credentialの値は手動投入
 #
 # A/B の値は tfstate に平文で保存されるため、state バケットを非公開・
 # バージョニング有効・公開アクセス禁止で運用する。
@@ -59,6 +59,31 @@ resource "google_secret_manager_secret_version" "managed" {
 # --- C. 値は人間が gcloud で投入する。version がない間はデプロイしない。 ---
 resource "google_secret_manager_secret" "twelve_data_api_key" {
   secret_id = "TWELVE_DATA_API_KEY"
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.services["secretmanager.googleapis.com"]]
+}
+
+locals {
+  oauth_secret_names = toset([
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+  ])
+}
+
+resource "google_secret_manager_secret" "oauth" {
+  for_each = local.oauth_secret_names
+
+  secret_id = each.key
 
   replication {
     auto {}

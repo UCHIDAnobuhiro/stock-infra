@@ -55,6 +55,7 @@ locals {
   all_secret_ids = merge(
     { for key, secret in google_secret_manager_secret.managed : key => secret.secret_id },
     { TWELVE_DATA_API_KEY = google_secret_manager_secret.twelve_data_api_key.secret_id },
+    { for key, secret in google_secret_manager_secret.oauth : key => secret.secret_id },
   )
 
   database_secret_names = [
@@ -74,6 +75,7 @@ locals {
     local.database_secret_names,
     local.redis_secret_names,
     ["JWT_SECRET", "PASSWORD_PEPPER"],
+    var.enable_oauth ? tolist(local.oauth_secret_names) : [],
   )
 
   jobs_secret_names = concat(

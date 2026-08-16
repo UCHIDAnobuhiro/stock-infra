@@ -93,7 +93,7 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 
 ### シークレットの管理
 
-シークレットは生成値・リソースからの導出値・手動投入する外部APIキーに分類します。実値はリポジトリに保存しません。Terraformが扱う生成値はstateに保存されるため、stateバケットでは公開アクセス禁止、Uniform bucket-level access、バージョニング、削除防止を設定します。
+シークレットは生成値・リソースからの導出値・手動投入する外部credentialに分類します。実値はリポジトリに保存しません。Terraformが扱う生成値はstateに保存されるため、stateバケットでは公開アクセス禁止、Uniform bucket-level access、バージョニング、削除防止を設定します。
 
 詳細は [docs/security.md](docs/security.md) を参照してください。
 
