@@ -13,7 +13,8 @@ initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/
 initial_batch_image   = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/batch:replace-with-git-sha"
 initial_migrate_image = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/migrate:replace-with-git-sha"
 
-cors_allowed_origins   = ["https://app.example.com"]
+cors_allowed_origins   = ["https://www.example.com"]
+cookie_domain          = "example.com"
 api_max_instance_count = 3
 
 # Cloud Run作成後、API独自ドメインを使う場合に有効化する。

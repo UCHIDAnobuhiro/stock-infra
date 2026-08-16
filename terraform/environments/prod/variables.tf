@@ -99,9 +99,22 @@ variable "cors_allowed_origins" {
   validation {
     condition = (
       length(var.cors_allowed_origins) > 0 &&
-      alltrue([for origin in var.cors_allowed_origins : can(regex("^https://", origin))])
+      alltrue([
+        for origin in var.cors_allowed_origins :
+        can(regex("^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$", origin))
+      ])
     )
-    error_message = "cors_allowed_origins はhttps://で始まるoriginを1件以上指定してください。"
+    error_message = "cors_allowed_origins は末尾スラッシュを含まないHTTPS originを1件以上指定してください。"
+  }
+}
+
+variable "cookie_domain" {
+  description = "認証セッションCookieを共有する親ドメイン。スキーム、先頭ドット、ポート、パスを含めない"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.cookie_domain))
+    error_message = "cookie_domain は小文字の親ドメイン（例: example.com）にしてください。"
   }
 }
 

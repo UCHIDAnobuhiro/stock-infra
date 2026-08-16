@@ -19,6 +19,7 @@ locals {
 
   api_env = merge(local.common_env, {
     CANDLES_CACHE_TTL         = "24h"
+    COOKIE_DOMAIN             = var.cookie_domain
     COOKIE_SECURE             = "true"
     CORS_ALLOWED_ORIGINS      = join(",", var.cors_allowed_origins)
     DB_CONN_MAX_LIFETIME      = "5m"

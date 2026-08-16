@@ -60,7 +60,9 @@ cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/b
 ```
 
 両ファイルへ実値を設定する。GitHubリポジトリは `owner/repo`、Git refは `refs/heads/main` のように指定する。
-`cors_allowed_origins` には本番frontendのHTTPS originを設定する。
+`cors_allowed_origins` には本番frontendのHTTPS originを末尾スラッシュなしで設定する。
+`cookie_domain` にはfrontendとAPIで認証セッションCookieを共有する親ドメインを、
+スキームや先頭ドットなしで設定する。
 新規環境の初回applyでは `enable_cloud_run = false` にして、Secret Manager、WIF、
 Artifact Registry等の前提基盤を先に作成する。`enable_api_domain` もこの段階では
 `false` のままにする。
