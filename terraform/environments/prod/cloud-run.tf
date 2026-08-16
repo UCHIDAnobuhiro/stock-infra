@@ -61,9 +61,11 @@ locals {
 resource "google_cloud_run_v2_service" "api" {
   count = var.enable_cloud_run ? 1 : 0
 
-  name                = "backend"
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_ALL"
+  name     = "backend"
+  location = var.region
+  ingress = var.restrict_api_to_load_balancer ? (
+    "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  ) : "INGRESS_TRAFFIC_ALL"
   deletion_protection = true
 
   # サービス全体のscaling設定。テンプレート単位のscalingとは別枠でCloud Run v2 APIが
@@ -148,14 +150,20 @@ resource "google_cloud_run_v2_service" "api" {
     vpc_access {
       egress = "PRIVATE_RANGES_ONLY"
       network_interfaces {
-        network    = data.google_compute_network.default.name
-        subnetwork = data.google_compute_subnetwork.default.name
+        network    = local.default_network_name
+        subnetwork = local.default_subnetwork_name
       }
     }
   }
 
   lifecycle {
     prevent_destroy = true
+
+    precondition {
+      condition     = !var.restrict_api_to_load_balancer || var.enable_api_domain
+      error_message = "restrict_api_to_load_balancer を有効にする前に enable_api_domain を有効にしてください。"
+    }
+
     ignore_changes = [
       template[0].containers[0].image,
       traffic,
@@ -163,6 +171,7 @@ resource "google_cloud_run_v2_service" "api" {
   }
 
   depends_on = [
+    google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
     google_secret_manager_secret_iam_member.api_accessor,
     google_secret_manager_secret_version.managed,
@@ -255,8 +264,8 @@ resource "google_cloud_run_v2_job" "batch_single" {
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
         network_interfaces {
-          network    = data.google_compute_network.default.name
-          subnetwork = data.google_compute_subnetwork.default.name
+          network    = local.default_network_name
+          subnetwork = local.default_subnetwork_name
         }
       }
     }
@@ -270,6 +279,7 @@ resource "google_cloud_run_v2_job" "batch_single" {
   }
 
   depends_on = [
+    google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
     google_secret_manager_secret_iam_member.jobs_accessor,
     google_secret_manager_secret_version.managed,

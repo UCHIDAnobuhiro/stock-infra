@@ -105,6 +105,44 @@ variable "cors_allowed_origins" {
   }
 }
 
+variable "enable_api_domain" {
+  description = "API独自ドメイン用の外部HTTPSロードバランサーを作成するか。Cloud Run作成後に有効化する"
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.enable_api_domain || (
+      var.enable_cloud_run && var.api_domain != ""
+    )
+    error_message = "enable_api_domain を有効にする場合は、enable_cloud_run=true と有効な api_domain が必要です。"
+  }
+}
+
+variable "api_domain" {
+  description = "APIの独自ドメイン。スキームやパスを含まないFQDNで指定する"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.api_domain == "" ||
+      can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.api_domain))
+    )
+    error_message = "api_domain は空文字か、小文字のFQDN（例: api.example.com）にしてください。"
+  }
+}
+
+variable "restrict_api_to_load_balancer" {
+  description = "Cloud Run APIへの外部通信をロードバランサー経由に限定するか。DNS・証明書・疎通確認後に有効化する"
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.restrict_api_to_load_balancer || var.enable_api_domain
+    error_message = "restrict_api_to_load_balancer を有効にする前に enable_api_domain を有効にしてください。"
+  }
+}
+
 variable "api_max_instance_count" {
   description = "Cloud Run APIの最大インスタンス数"
   type        = number
@@ -121,4 +159,3 @@ variable "enable_cloud_run" {
   type        = bool
   default     = true
 }
-

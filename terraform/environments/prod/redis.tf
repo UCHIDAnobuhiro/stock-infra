@@ -8,10 +8,13 @@ resource "google_redis_instance" "main" {
   region         = var.region
   redis_version  = "REDIS_7_2"
 
-  authorized_network      = data.google_compute_network.default.id
+  authorized_network      = local.default_network_id
   connect_mode            = "DIRECT_PEERING"
   auth_enabled            = true
   transit_encryption_mode = "DISABLED"
 
-  depends_on = [google_project_service.services["redis.googleapis.com"]]
+  depends_on = [
+    google_project_service.services["compute.googleapis.com"],
+    google_project_service.services["redis.googleapis.com"],
+  ]
 }

@@ -16,5 +16,11 @@ initial_migrate_image = "asia-northeast1-docker.pkg.dev/replace-with-project-id/
 cors_allowed_origins   = ["https://app.example.com"]
 api_max_instance_count = 3
 
+# Cloud Run作成後、API独自ドメインを使う場合に有効化する。
+# restrict_api_to_load_balancerはDNS・証明書・疎通確認後にtrueへ変更する。
+enable_api_domain             = false
+api_domain                    = "api.example.com"
+restrict_api_to_load_balancer = false
+
 # 新規環境の初回applyではfalseにする。Secret versionと初回イメージを用意してからtrueへ変更する。
 enable_cloud_run = false
