@@ -25,6 +25,7 @@ flowchart LR
     RUNTIME -->|"Direct VPC egress"| REDIS["Memorystore for Redis"]
     RUNTIME --> SECRETS["Secret Manager"]
     RUNTIME --> AI["Vertex AI / Vision API"]
+    SCHED["Cloud Scheduler"] -->|"OAuth token"| RUN
     TF["Terraform"] --> SQL
     TF --> REDIS
     TF --> AR
@@ -33,6 +34,7 @@ flowchart LR
     TF --> DEPLOYER
     TF --> WIF["Workload Identity Federation"]
     TF --> RUN
+    TF --> SCHED
 ```
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
@@ -41,7 +43,7 @@ flowchart LR
 
 | 担当 | 管理対象 |
 |---|---|
-| Terraform | Cloud Runサービス・Jobsとその設定、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| Terraform | Cloud Runサービス・Jobsとその設定、Cloud Scheduler、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
 | backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
 
 Cloud Runの環境変数、Secret参照、ネットワーク、ランタイムSA、リソース制限、Job引数はTerraformで管理します。
@@ -51,6 +53,9 @@ CDと共有するのはコンテナイメージとServiceのtrafficだけであ�
 
 バッチは単一のCloud Run Job `batch` として構築し、`candles` / `logo` /
 `auth-session-cleanup` は実行時の `job_id` 引数で切り替えます。
+
+`candles` は毎日7:00 JST、`logo` は毎週日曜10:00 JSTにCloud Schedulerが自動実行します。
+`auth-session-cleanup` は現時点で定期実行を設定していません。
 
 ## 主な設計判断
 

@@ -3,7 +3,8 @@ locals {
     "aiplatform.googleapis.com",       # Vertex AI (Gemini)
     "artifactregistry.googleapis.com", # コンテナイメージレジストリ
     "cloudresourcemanager.googleapis.com",
-    "compute.googleapis.com", # default VPC / Direct VPC egress
+    "cloudscheduler.googleapis.com", # candles/logoバッチの定期実行(Cloud Scheduler)
+    "compute.googleapis.com",        # default VPC / Direct VPC egress
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # WIF トークン発行
     "logging.googleapis.com",

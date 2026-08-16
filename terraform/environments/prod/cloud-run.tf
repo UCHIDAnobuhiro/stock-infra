@@ -280,6 +280,19 @@ resource "google_cloud_run_v2_job_iam_member" "batch_single_deployer" {
   member   = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Cloud SchedulerからのJob起動用。logo実行はcontainerOverridesでargsを上書きするため、
+# roles/run.invokerには含まれないrun.jobs.runWithOverridesを持つjobsExecutorWithOverridesを付与する。
+# roles/run.developerのような広い権限（create/update/delete等）は与えない。
+resource "google_cloud_run_v2_job_iam_member" "batch_single_scheduler" {
+  count = var.enable_cloud_run ? 1 : 0
+
+  project  = google_cloud_run_v2_job.batch_single[0].project
+  location = google_cloud_run_v2_job.batch_single[0].location
+  name     = google_cloud_run_v2_job.batch_single[0].name
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
 resource "google_cloud_run_v2_job" "migrate" {
   count = var.enable_cloud_run ? 1 : 0
 
