@@ -147,6 +147,8 @@ terraform -chdir=terraform/environments/prod plan
 
 `must be replaced` や既存リソースの削除があれば中止する。人間がplanを確認してapplyした後、
 DNS事業者へ登録する値を取得する。
+途中のリソース作成が失敗した場合は作成済みリソースを手動削除せず、設定を修正して
+再度planする。再作成や削除がなく、未作成分の追加だけであることを確認する。
 
 ```bash
 terraform -chdir=terraform/environments/prod output -json api_dns_records
@@ -154,20 +156,28 @@ terraform -chdir=terraform/environments/prod output -json api_dns_records
 
 outputの `api` をAレコード、`certificate_authorization` をCNAMEレコードとして
 DNS事業者へ登録する。DNS画面がホスト名のみを求める場合はゾーン名との重複を避ける。
-既存のMX、TXT、無関係なA/CNAMEレコードは変更しない。
+同じAPIホスト名に旧CNAMEが残っている場合は、Aレコードと共存できないため旧CNAMEを削除する。
+既存のMX、TXT、無関係なA/CNAMEレコードは変更しない。証明書認証用CNAMEは自動更新に
+必要なため、証明書が発行された後も残す。
 
 DNS反映と証明書発行後に次を確認する。
 
 ```bash
 dig +short api.example.com A
-dig +short _acme-challenge.api.example.com CNAME
-gcloud certificate-manager certificates describe <resource-prefix>-api-certificate --location=global
+dig +short <certificate-authorization-record> CNAME
+gcloud certificate-manager certificates describe <resource-prefix>-api-certificate \
+  --location=global \
+  --project=<project-id> \
+  --format='value(managed.state)'
 curl -fsS https://api.example.com/healthz
 curl -I http://api.example.com/healthz
 ```
 
 CNAMEのホスト名は固定せず、`api_dns_records` の実際のoutputに合わせる。
-HTTPSがhealth checkに成功し、HTTPがHTTPSへリダイレクトされることを確認する。
+証明書はDNS反映後もしばらく `PROVISIONING` になる。`ACTIVE` へ変わるまで
+`restrict_api_to_load_balancer = false` を維持する。数時間経っても `ACTIVE` にならない場合は、
+`managed.authorizationAttemptInfo` とCNAMEの公開DNS応答を確認する。HTTPSがhealth checkに成功し、
+HTTPがHTTPSへリダイレクトされることを確認する。
 
 疎通確認後に次へ変更する。
 
@@ -177,7 +187,11 @@ restrict_api_to_load_balancer = true
 
 再度planを確認し、Cloud Runのingress以外に意図しない差分がないことを確認してから
 人間がapplyする。独自ドメインが引き続き応答し、インターネットからCloud RunのデフォルトURIへ
-直接アクセスできないことを確認する。
+直接アクセスすると `404` 等で拒否されることを確認する。最後にTerraform planが
+`No changes` になることを確認する。
+
+Serverless NEGのBackend Serviceに `timeout_sec` を設定するとGCP APIが拒否する。
+リクエストのタイムアウトはCloud Run Service側で管理し、Backend Serviceには設定しない。
 
 切り替え後にロードバランサー経路の障害が発生した場合は、ロードバランサーやDNSを削除せず、
 `restrict_api_to_load_balancer = false` へ戻すplanを確認して人間がapplyする。
