@@ -98,7 +98,7 @@ resource "google_cloud_run_v2_service" "api" {
     timeout         = "300s"
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = 1
       max_instance_count = var.api_max_instance_count
     }
 
