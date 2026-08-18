@@ -13,6 +13,12 @@ variable "region" {
   type        = string
 }
 
+variable "vertex_ai_location" {
+  description = "Vertex AI Geminiモデルを呼び出すロケーション"
+  type        = string
+  default     = "global"
+}
+
 variable "resource_prefix" {
   description = "GCP リソース名に付与する短いプレフィックス"
   type        = string

@@ -60,6 +60,8 @@ cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/b
 ```
 
 両ファイルへ実値を設定する。GitHubリポジトリは `owner/repo`、Git refは `refs/heads/main` のように指定する。
+`region` にはCloud Run等のGCPリソース配置先、`vertex_ai_location` には使用するGeminiモデルの
+対応ロケーションを指定する。現在のデフォルトは `global` とする。
 `cors_allowed_origins` には本番frontendのHTTPS originを末尾スラッシュなしで設定する。
 `cookie_domain` にはfrontendとAPIで認証セッションCookieを共有する親ドメインを、
 スキームや先頭ドットなしで設定する。

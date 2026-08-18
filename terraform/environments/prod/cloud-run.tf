@@ -41,7 +41,7 @@ locals {
       DB_CONN_MAX_LIFETIME      = "5m"
       DB_MAX_IDLE_CONNS         = "25"
       DB_MAX_OPEN_CONNS         = "25"
-      GOOGLE_CLOUD_LOCATION     = var.region
+      GOOGLE_CLOUD_LOCATION     = var.vertex_ai_location
       GOOGLE_CLOUD_PROJECT      = var.project_id
       GOOGLE_GENAI_USE_VERTEXAI = "true"
       TRUSTED_PROXY_HOPS        = "1"
