@@ -51,6 +51,7 @@ flowchart LR
 | backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
 
 Cloud Runの環境変数、Secret参照、ネットワーク、ランタイムSA、リソース制限、Job引数はTerraformで管理します。
+Cloud Run等の配置先は `region`、Vertex AI Geminiの呼び出し先は `vertex_ai_location` で個別に設定します。
 CDと共有するのはコンテナイメージとServiceのtrafficだけであり、この2属性に限定して
 `lifecycle.ignore_changes` を設定します。これによりアプリケーションのリリース速度を保ちつつ、
 それ以外の設定driftをTerraform planで検出します。

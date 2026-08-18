@@ -1,12 +1,13 @@
 # このファイルを terraform.tfvars にコピーし、ローカルで実値へ置き換える。
 # terraform.tfvars は .gitignore 対象。
-project_id        = "replace-with-project-id"
-region            = "asia-northeast1"
-resource_prefix   = "stock"
-github_repository = "your-org/your-backend-repository"
-github_ref        = "refs/heads/main"
-db_name           = "app"
-db_user           = "appuser"
+project_id         = "replace-with-project-id"
+region             = "asia-northeast1"
+vertex_ai_location = "global"
+resource_prefix    = "stock"
+github_repository  = "your-org/your-backend-repository"
+github_ref         = "refs/heads/main"
+db_name            = "app"
+db_user            = "appuser"
 
 # backendリポジトリのpublish_only実行でpushした同一commit SHAのイメージを指定する。
 initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/backend:replace-with-git-sha"
