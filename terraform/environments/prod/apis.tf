@@ -4,7 +4,7 @@ locals {
     "artifactregistry.googleapis.com",   # コンテナイメージレジストリ
     "certificatemanager.googleapis.com", # API独自ドメインのGoogle管理TLS証明書
     "cloudresourcemanager.googleapis.com",
-    "cloudscheduler.googleapis.com", # candles/logoバッチの定期実行(Cloud Scheduler)
+    "cloudscheduler.googleapis.com", # batch Jobの定期実行(Cloud Scheduler)
     "compute.googleapis.com",        # default VPC / Direct VPC egress
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # WIF トークン発行

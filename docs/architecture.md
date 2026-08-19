@@ -100,8 +100,9 @@ Serverless NEGをbackendに持つBackend Serviceは `timeout_sec` をサポー�
 
 ## 定期実行（Cloud Scheduler）
 
-candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTに、Cloud SchedulerがCloud Run Admin API v2の
-`projects.locations.jobs.run` をHTTPターゲットとして呼び出し、単一batch Jobの実行を起動する。
+auth-session-cleanupは毎日3:30 JST、candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTに、
+Cloud SchedulerがCloud Run Admin API v2の `projects.locations.jobs.run` をHTTPターゲットとして呼び出し、
+単一batch Jobの実行を起動する。
 
 ```mermaid
 sequenceDiagram
@@ -112,7 +113,7 @@ sequenceDiagram
     SCHED->>SCHED: scheduler SAのOAuthトークンを取得
     SCHED->>RUN: POST .../jobs/batch:run (overrides.containerOverrides[].args)
     RUN->>JOB: job_id引数でExecutionを起動
-    JOB->>JOB: jobs_runner SAとしてcandles/logoを実行
+    JOB->>JOB: jobs_runner SAとして指定されたjob_idを実行
 ```
 
 scheduler SAには対象Job単位で `roles/run.jobsExecutorWithOverrides` を付与する。

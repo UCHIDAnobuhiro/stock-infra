@@ -1,8 +1,8 @@
-# candles/logoバッチを定期実行するCloud Scheduler。
+# batch Jobの各job_idを定期実行するCloud Scheduler。
 #
 # Cloud Run Admin API v2 の projects.locations.jobs.run をHTTPターゲットとして呼び出す。
 # デフォルトargsは cloud-run.tf 側の batch_single Job定義（["candles"]）に依存するため、
-# candles/logoどちらも overrides.containerOverrides で job_id を明示的に指定する。
+# すべてのSchedulerが overrides.containerOverrides で job_id を明示的に指定する。
 # こうすることで、将来デフォルトargsが変わってもScheduler側の挙動はこのファイルの記述だけで分かる。
 #
 # google_cloud_scheduler_job には deletion_protection 相当の属性が存在しない。
@@ -103,6 +103,55 @@ resource "google_cloud_scheduler_job" "logo_weekly" {
           {
             name = "batch"
             args = ["logo"]
+          },
+        ]
+      }
+    }))
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [
+    google_project_service.services["cloudscheduler.googleapis.com"],
+    google_cloud_run_v2_job_iam_member.batch_single_scheduler,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "auth_session_cleanup_daily" {
+  count = var.enable_cloud_run ? 1 : 0
+
+  name        = "auth-session-cleanup-daily"
+  description = "batch Job(job_id=auth-session-cleanup)を毎日3:30 JSTに実行する"
+  schedule    = "30 3 * * *"
+  time_zone   = "Asia/Tokyo"
+  region      = var.region
+
+  attempt_deadline = "300s"
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "5s"
+    max_backoff_duration = "60s"
+    max_doublings        = 3
+  }
+
+  http_target {
+    uri         = local.batch_job_run_uri
+    http_method = "POST"
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    body = base64encode(jsonencode({
+      overrides = {
+        containerOverrides = [
+          {
+            name = "batch"
+            args = ["auth-session-cleanup"]
           },
         ]
       }
