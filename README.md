@@ -59,8 +59,8 @@ CDと共有するのはコンテナイメージとServiceのtrafficだけであ�
 バッチは単一のCloud Run Job `batch` として構築し、`candles` / `logo` /
 `auth-session-cleanup` は実行時の `job_id` 引数で切り替えます。
 
-`candles` は毎日7:00 JST、`logo` は毎週日曜10:00 JSTにCloud Schedulerが自動実行します。
-`auth-session-cleanup` は現時点で定期実行を設定していません。
+`auth-session-cleanup` は毎日3:30 JST、`candles` は毎日7:00 JST、`logo` は毎週日曜10:00 JSTに
+Cloud Schedulerが自動実行します。
 
 ## 主な設計判断
 

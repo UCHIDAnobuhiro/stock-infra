@@ -128,7 +128,8 @@ backendのAPI・batch・migrate CDを `publish_only=true` で実行する。GitH
 `initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。
 
 再度Terraform planを確認して人間がapplyする。この段階ではAPIサービス1件、単一のbatch Job、
-migrate Job 1件、Cloud Scheduler 2件（candles-daily、logo-weekly）と関連IAMが追加される。
+migrate Job 1件、Cloud Scheduler 3件（auth-session-cleanup-daily、candles-daily、logo-weekly）と
+関連IAMが追加される。
 初回作成後のイメージ更新はbackend CDが担当し、Terraformはイメージ差分を無視する。
 
 通常のbackend CDは既存Cloud Runリソースのイメージだけを更新する。デプロイ後に
@@ -144,11 +145,14 @@ gcloud run jobs execute batch \
   --wait
 ```
 
-candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTにCloud Schedulerが自動実行する。上記の手動実行は
-バックフィルや動作確認用であり、Cloud Schedulerの定期実行を妨げず、いつでも追加で実行できる。
+auth-session-cleanupは毎日3:30 JST、candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTに
+Cloud Schedulerが自動実行する。上記の手動実行はバックフィルや動作確認用であり、
+Cloud Schedulerの定期実行を妨げず、いつでも追加で実行できる。
 定期実行の状態確認や単発トリガーには次を使う。
 
 ```bash
+gcloud scheduler jobs describe auth-session-cleanup-daily --location asia-northeast1
+gcloud scheduler jobs run auth-session-cleanup-daily --location asia-northeast1
 gcloud scheduler jobs describe candles-daily --location asia-northeast1
 gcloud scheduler jobs run candles-daily --location asia-northeast1
 gcloud run jobs executions list --job batch --region asia-northeast1
