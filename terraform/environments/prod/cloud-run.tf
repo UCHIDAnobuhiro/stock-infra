@@ -159,7 +159,7 @@ resource "google_cloud_run_v2_service" "api" {
           value_source {
             secret_key_ref {
               secret  = local.all_secret_ids[env.value]
-              version = "latest"
+              version = local.all_secret_versions[env.value]
             }
           }
         }
@@ -272,7 +272,7 @@ resource "google_cloud_run_v2_job" "batch_single" {
             value_source {
               secret_key_ref {
                 secret  = local.all_secret_ids[env.value]
-                version = "latest"
+                version = local.all_secret_versions[env.value]
               }
             }
           }
@@ -383,7 +383,7 @@ resource "google_cloud_run_v2_job" "migrate" {
             value_source {
               secret_key_ref {
                 secret  = local.all_secret_ids[env.value]
-                version = "latest"
+                version = local.all_secret_versions[env.value]
               }
             }
           }

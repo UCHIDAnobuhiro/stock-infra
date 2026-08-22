@@ -65,6 +65,8 @@ cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/b
 `cors_allowed_origins` には本番frontendのHTTPS originを末尾スラッシュなしで設定する。
 `cookie_domain` にはfrontendとAPIで認証セッションCookieを共有する親ドメインを、
 スキームや先頭ドットなしで設定する。
+`manual_secret_versions`には分類CのSecret値ではなく、Secret Managerに存在する数値versionだけを
+設定する。OAuthを無効にしている間も5項目を省略せず、使用開始前に実際のversionへ合わせる。
 新規環境の初回applyでは `enable_cloud_run = false` にして、Secret Manager、WIF、
 Artifact Registry等の前提基盤を先に作成する。`enable_api_domain` もこの段階では
 `false` のままにする。
@@ -87,6 +89,14 @@ gcloud secrets versions add TWELVE_DATA_API_KEY --data-file=-
 ```
 
 コマンド実行後に標準入力から値を入力する。値をコマンド引数、ファイル、シェル履歴へ残さない。
+作成されたversion番号を確認し、`terraform.tfvars`の`manual_secret_versions.TWELVE_DATA_API_KEY`へ
+文字列で設定する。`latest`は指定しない。
+
+```bash
+gcloud secrets versions list TWELVE_DATA_API_KEY \
+  --filter='state=ENABLED' \
+  --sort-by='~createTime'
+```
 
 ### OAuthを有効化する場合
 
@@ -101,7 +111,8 @@ gcloud secrets versions add GITHUB_CLIENT_SECRET --data-file=-
 ```
 
 各コマンドの実行後、値を貼り付けた直後にEnterを押さず `Ctrl-D` で入力を終了する。
-4つすべてにversionが作成されたことを確認してから、`terraform.tfvars`へ次を設定する。
+4つすべてにversionが作成されたことを確認し、それぞれの数値versionを
+`manual_secret_versions`へ設定してから、`terraform.tfvars`へ次を設定する。
 
 ```hcl
 enable_oauth                = true
@@ -251,6 +262,76 @@ Serverless NEGのBackend Serviceに `timeout_sec` を設定するとGCP APIが�
 
 切り替え後にロードバランサー経路の障害が発生した場合は、ロードバランサーやDNSを削除せず、
 `restrict_api_to_load_balancer = false` へ戻すplanを確認して人間がapplyする。
+
+## Secret versionの固定とローテーション
+
+Cloud Run Service / JobsのSecret参照はすべて数値versionへ固定する。分類A/BはTerraform管理の
+Secret versionを参照し、分類Cは`manual_secret_versions`で参照先を選ぶ。旧versionはrollback期間が
+終わるまで有効なまま残し、新旧versionを同時に`latest`で配布しない。
+
+### 既存環境を`latest`から移行する
+
+1. 分類Cの各Secretで現在使用している有効なversion番号を確認し、ローカルの
+   `terraform.tfvars`に設定する。値そのものは取得・記録しない。
+2. `terraform plan`を実行する。分類A/BのSecretデータと`random_password`に変更がなく、
+   Secret versionの削除ポリシー変更と、Cloud Run Service / Jobsの参照が`latest`から現在の
+   数値versionへ変わるだけであることを確認する。
+3. `must be replaced`、Secret versionの追加、`random_password`・Cloud SQL・Redisの変更、
+   リソースの削除が1件でもあれば移行を中止する。
+4. 人間がplanを確認してapplyした後、APIの新Revisionとbatch / migrate Job定義が意図した
+   数値versionを参照していることを確認する。Secret値は表示しない。
+5. APIのhealth check、認証、DB・Redis接続を確認し、batchとmigrateを安全なタイミングで
+   1回ずつ実行する。APIのtrafficが新Revisionへ切り替わっていなければ、backend CDの
+   traffic切り替え手順を使う。
+
+```bash
+gcloud run services describe backend --region <region> \
+  --format='yaml(spec.template.spec.containers[0].env)'
+gcloud run services describe backend --region <region> \
+  --format='yaml(status.traffic,status.latestReadyRevisionName)'
+gcloud run jobs describe batch --region <region> \
+  --format='yaml(spec.template.spec.template.spec.containers[0].env)'
+gcloud run jobs describe migrate --region <region> \
+  --format='yaml(spec.template.spec.template.spec.containers[0].env)'
+```
+
+### 共通のローテーション手順
+
+ローテーションはSecretの種類ごとに単独の変更として行い、Redis等の移行や通常のデプロイと
+同時に実施しない。開始前に現在の数値version、API Revision、Job定義、依存リソースの状態を
+記録し、旧versionを無効化しない。
+
+1. 新しいSecret versionを作成する。分類Cは標準入力から手動投入し、分類A/Bは承認済みの
+   元データ変更によってTerraformに作成させる。
+2. DBパスワードやRedis接続情報では、依存リソースの切り替え順序、停止時間、復旧手順を
+   個別のplanと手順書で確認する。再作成を含むplanは通常変更としてapplyしない。
+3. 分類Cは`manual_secret_versions`を新versionへ更新する。分類A/Bは新しく作成される
+   `google_secret_manager_secret_version.managed[*].version`が自動的に参照される。
+4. planで対象のSecret version、依存リソース、Cloud Runテンプレート以外に差分がないことを
+   確認し、人間がapplyする。Terraformは分類A/Bの旧versionをSecret Managerに残す。
+5. APIの新Revisionへtrafficが切り替わったこと、health check・認証・DB・Redis接続、対象Jobの
+   Executionを確認する。監視期間が終了するまで旧versionと旧Revisionを残す。
+6. 問題があれば分類Cは`manual_secret_versions`を旧番号へ戻す。分類A/Bは依存リソースを旧値へ
+   戻したうえで、`managed_secret_version_overrides`に旧番号を一時設定する。planを確認して
+   applyし、API trafficとJob定義が旧versionへ戻ったことを確認する。
+7. 復旧後は原因を解消して新versionを発行し直し、正常化を確認してからoverrideを削除する。
+   rollback期間の終了後、不要なversionの無効化・破棄は人間が別作業として実施する。
+
+`managed_secret_version_overrides`は緊急rollback専用である。依存リソースを戻さずに接続情報だけを
+旧versionへ戻してはいけない。また、恒久設定として残さない。
+
+### Secret別の注意事項
+
+- `TWELVE_DATA_API_KEY`とOAuth credentialは、新version追加、`manual_secret_versions`更新、
+  APIまたはbatchの動作確認の順に切り替える。rollbackは旧version番号へ戻す。
+- `JWT_SECRET`の変更では発行済みトークンが無効になる。強制再ログインとメンテナンス時間を
+  事前告知し、即時rollbackは旧Secretを参照するAPI Revisionへtrafficを戻す。
+- `PASSWORD_PEPPER`を変更すると既存のパスワードハッシュを検証できない。複数pepper対応や
+  パスワード再設定計画がない限りローテーションしない。誤変更時は直ちに旧Revisionへ戻す。
+- `DB_PASSWORD`は単一DBユーザーのパスワードと同時に切り替わるため、無停止の新旧併用はできない。
+  専用のメンテナンス変更として扱い、旧パスワードへ戻す手段を確認してから実施する。
+- Redis接続情報はRedis再作成と分離できない場合がある。再作成を示すplanでは停止し、データ消失、
+  接続先変更、API / Job再デプロイ、旧インスタンスへの切り戻しを含む単独の移行手順を作成する。
 
 ## 日常の変更
 
