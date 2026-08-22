@@ -39,8 +39,8 @@ locals {
       COOKIE_SECURE             = "true"
       CORS_ALLOWED_ORIGINS      = join(",", var.cors_allowed_origins)
       DB_CONN_MAX_LIFETIME      = "5m"
-      DB_MAX_IDLE_CONNS         = "25"
-      DB_MAX_OPEN_CONNS         = "25"
+      DB_MAX_IDLE_CONNS         = tostring(local.database_pool.api.max_idle)
+      DB_MAX_OPEN_CONNS         = tostring(local.database_pool.api.max_open)
       GOOGLE_CLOUD_LOCATION     = var.vertex_ai_location
       GOOGLE_CLOUD_PROJECT      = var.project_id
       GOOGLE_GENAI_USE_VERTEXAI = "true"
@@ -60,6 +60,8 @@ locals {
 
   batch_env = merge(local.common_env, {
     CANDLES_CACHE_TTL            = "24h"
+    DB_MAX_IDLE_CONNS            = tostring(local.database_pool.batch.max_idle)
+    DB_MAX_OPEN_CONNS            = tostring(local.database_pool.batch.max_open)
     INGEST_MAX_FAILURE_RATE      = "0.2"
     INGEST_TIMEOUT_HOURS         = "3"
     LOGO_INGEST_MAX_FAILURE_RATE = "0.2"
@@ -74,6 +76,11 @@ locals {
       TWELVE_DATA_BASE_URL = "TWELVE_DATA_BASE_URL"
     },
   )
+
+  migrate_env = merge(local.common_env, {
+    DB_MAX_IDLE_CONNS = tostring(local.database_pool.migrate.max_idle)
+    DB_MAX_OPEN_CONNS = tostring(local.database_pool.migrate.max_open)
+  })
 
 }
 
@@ -362,7 +369,7 @@ resource "google_cloud_run_v2_job" "migrate" {
         }
 
         dynamic "env" {
-          for_each = local.common_env
+          for_each = local.migrate_env
           content {
             name  = env.key
             value = env.value
