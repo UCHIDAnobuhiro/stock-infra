@@ -102,6 +102,9 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── terraform.yml     # TerraformのPR CI
 ├── README.md
 ├── AGENTS.md
 ├── docs/
@@ -139,6 +142,14 @@ terraform -chdir=terraform/bootstrap validate
 terraform -chdir=terraform/environments/prod init -backend=false
 terraform -chdir=terraform/environments/prod validate
 ```
+
+pull requestでは `.github/workflows/terraform.yml` が同じformat・validateを自動実行します。
+CIの `terraform init` は `-backend=false` で実行し、GCP認証情報や実環境のbackend設定を使用しません。
+Providerは各Terraform rootのlock fileを基準にキャッシュします。
+
+`main` への不正な変更を防ぐため、GitHubのbranch rulesetまたはbranch protectionで
+pull requestを必須にし、status check `Format and validate` の成功をmerge条件に設定します。
+workflow名やjob名を変更した場合は、必須status checkの設定も同時に更新します。
 
 認証済み環境では、各rootで `terraform plan` を実行して変更内容を確認します。`apply` はplanを人間が確認した後にのみ実行します。
 
