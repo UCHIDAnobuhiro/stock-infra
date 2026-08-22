@@ -33,6 +33,12 @@ stateファイルをGit、チャット、issue、CIログへ貼り付けない�
 
 分類Cの値は `.tf`、`.tfvars`、シェル履歴へ残さない入力方法を使用する。
 
+Cloud Run Service / Jobsは`latest`を参照せず、すべて数値versionへ固定する。分類A/Bは
+Terraformが管理する`google_secret_manager_secret_version`のversionを参照し、分類Cは
+ローカルの`terraform.tfvars`にversion番号だけを記録する。分類A/Bのversion更新では
+`deletion_policy = "ABANDON"`により旧versionを残し、動作確認とrollback期間の終了後に
+人間が無効化・破棄を判断する。
+
 ## IAM
 
 - API、バッチ、マイグレーション、デプロイ、Cloud Scheduler呼び出しでサービスアカウントを分離する
