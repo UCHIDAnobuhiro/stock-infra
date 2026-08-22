@@ -68,6 +68,50 @@ variable "twelve_data_base_url" {
   default     = "https://api.twelvedata.com"
 }
 
+variable "manual_secret_versions" {
+  description = "人間が値を投入するSecretの参照version。値ではなく有効な数値versionだけを指定する"
+  type = object({
+    TWELVE_DATA_API_KEY  = string
+    GOOGLE_CLIENT_ID     = string
+    GOOGLE_CLIENT_SECRET = string
+    GITHUB_CLIENT_ID     = string
+    GITHUB_CLIENT_SECRET = string
+  })
+
+  validation {
+    condition = alltrue([
+      for version in values(var.manual_secret_versions) :
+      can(regex("^[1-9][0-9]*$", version))
+    ])
+    error_message = "manual_secret_versions はlatestや空文字ではなく、1以上の数値versionを文字列で指定してください。"
+  }
+}
+
+variable "managed_secret_version_overrides" {
+  description = "Terraform管理Secretを旧versionへ戻す緊急rollback用。通常は空のまま使用する"
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for name, version in var.managed_secret_version_overrides :
+      contains([
+        "JWT_SECRET",
+        "PASSWORD_PEPPER",
+        "DB_PASSWORD",
+        "DB_USER",
+        "DB_NAME",
+        "INSTANCE_CONNECTION_NAME",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "TWELVE_DATA_BASE_URL",
+      ], name) && can(regex("^[1-9][0-9]*$", version))
+    ])
+    error_message = "managed_secret_version_overrides はTerraform管理Secret名と1以上の数値versionだけを指定してください。"
+  }
+}
+
 variable "initial_api_image" {
   description = "Cloud Run APIの初回作成に使うイメージ。以後の更新はbackend CDが管理する"
   type        = string

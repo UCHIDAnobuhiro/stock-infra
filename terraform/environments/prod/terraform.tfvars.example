@@ -9,6 +9,18 @@ github_ref         = "refs/heads/main"
 db_name            = "app"
 db_user            = "appuser"
 
+# 手動投入したSecretの有効な数値versionを指定する。値そのものは記載しない。
+manual_secret_versions = {
+  TWELVE_DATA_API_KEY  = "1"
+  GOOGLE_CLIENT_ID     = "1"
+  GOOGLE_CLIENT_SECRET = "1"
+  GITHUB_CLIENT_ID     = "1"
+  GITHUB_CLIENT_SECRET = "1"
+}
+
+# 緊急rollbackでTerraform管理Secretを旧versionへ戻す場合だけ設定し、復旧後に削除する。
+# managed_secret_version_overrides = { DB_PASSWORD = "1" }
+
 # backendリポジトリのpublish_only実行でpushした同一commit SHAのイメージを指定する。
 initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/backend:replace-with-git-sha"
 initial_batch_image   = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/batch:replace-with-git-sha"

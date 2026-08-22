@@ -52,8 +52,22 @@ resource "google_secret_manager_secret" "managed" {
 resource "google_secret_manager_secret_version" "managed" {
   for_each = local.managed_secrets
 
-  secret      = google_secret_manager_secret.managed[each.key].id
-  secret_data = each.value
+  secret          = google_secret_manager_secret.managed[each.key].id
+  secret_data     = each.value
+  deletion_policy = "ABANDON"
+
+  # ローテーション時は新versionを先に作り、rollback用の旧versionをSecret Managerに残す。
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+locals {
+  # Cloud Runでlatestを参照せず、このresourceが管理する数値versionへ固定する。
+  managed_secret_versions = {
+    for key, secret_version in google_secret_manager_secret_version.managed :
+    key => secret_version.version
+  }
 }
 
 # --- C. 値は人間が gcloud で投入する。version がない間はデプロイしない。 ---
@@ -94,4 +108,14 @@ resource "google_secret_manager_secret" "oauth" {
   }
 
   depends_on = [google_project_service.services["secretmanager.googleapis.com"]]
+}
+
+locals {
+  # 分類Cは値をTerraformへ渡さず、人間が投入したversion番号だけをローカル設定で管理する。
+  # managed_secret_version_overridesは依存リソースを旧値へ戻す緊急rollback時だけ使用する。
+  all_secret_versions = merge(
+    local.managed_secret_versions,
+    var.manual_secret_versions,
+    var.managed_secret_version_overrides,
+  )
 }
