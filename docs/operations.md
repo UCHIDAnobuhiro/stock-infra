@@ -135,6 +135,31 @@ migrate Job 1件、Cloud Scheduler 3件（auth-session-cleanup-daily、candles-d
 通常のbackend CDは既存Cloud Runリソースのイメージだけを更新する。デプロイ後に
 Terraform planを実行し、イメージとtraffic以外の差分がないことを確認する。
 
+### Cloud SQL接続プールの確認
+
+`db-f1-micro`では、API 1インスタンスあたり最大5接続、batchとmigrateは1タスクあたり
+最大2接続に制限する。APIが最大3インスタンスまで増え、batchとmigrateが同時に動作しても
+最大19接続とし、接続上限25のうち6接続を運用・監視用に残す。
+
+適用前に実環境へ接続し、想定している接続上限と一致することを確認する。
+
+```sql
+SHOW max_connections;
+
+SELECT application_name, state, count(*) AS connections
+FROM pg_stat_activity
+GROUP BY application_name, state
+ORDER BY connections DESC;
+```
+
+`max_connections`が25でない場合やtierを変更する場合は、そのままapplyせず、
+`terraform/environments/prod/sql.tf`の接続予算を実測値に合わせて見直す。
+Terraform apply後は通常時とピーク時に同じクエリを実行し、Cloud SQLの接続数、
+Cloud Run APIの5xxエラー率、batchとmigrateの実行結果を確認する。
+
+Cloud Run Jobは複数Executionを同時に起動できる。バックフィルや手動migrateを行う際は、
+既存のbatch/migrateが実行中でないことを確認し、接続予算に含めていない重複実行を避ける。
+
 単一Jobのバッチ実行はbackendのbatch CDで `execute=true` と `job_id` を指定するか、次のように
 実行時引数を上書きする。
 
