@@ -13,7 +13,6 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugin-cache
 
 jobs:
   validate:
@@ -32,12 +31,14 @@ jobs:
           terraform_version: "~1.9.0"
 
       - name: Prepare provider plugin cache
-        run: mkdir -p "${TF_PLUGIN_CACHE_DIR}"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/terraform-plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=${RUNNER_TEMP}/terraform-plugin-cache" >> "${GITHUB_ENV}"
 
       - name: Cache Terraform providers
         uses: actions/cache@v6
         with:
-          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          path: ${{ runner.temp }}/terraform-plugin-cache
           key: terraform-${{ runner.os }}-1.9-${{ hashFiles('**/.terraform.lock.hcl') }}
           restore-keys: |
             terraform-${{ runner.os }}-1.9-
