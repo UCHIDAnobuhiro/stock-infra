@@ -5,7 +5,7 @@
 | 分類 | 例 | 保存先 |
 |---|---|---|
 | 公開可能 | Terraformコード、Provider制約、設計判断、架空値のexample | Gitリポジトリ |
-| 環境固有 | GCPプロジェクトID、Billing Account、Organization / Folder ID、stateバケット名、許可するGitHubリポジトリ | `.gitignore` 対象のローカル設定 |
+| 環境固有 | GCPプロジェクトID、Billing Account、Organization / Folder ID、stateバケット名、許可するGitHubの数値ID・workflow | `.gitignore` 対象のローカル設定 |
 | 秘密情報 | APIキー、パスワード、秘密鍵、サービスアカウントJSON、tfstate | Secret Managerまたは保護されたstate |
 
 GCPプロジェクトID等は認証情報ではないが、公開リポジトリから実環境を分離し、誤操作を防ぐためローカル設定として扱う。
@@ -53,7 +53,15 @@ Terraformが管理する`google_secret_manager_secret_version`のversionを参�
 
 ## Workload Identity Federation
 
-GitHub Actionsからの認証はOIDCを使用し、サービスアカウントキーを発行しない。Providerのconditionで `repository` と `ref` の両方を検証する。許可対象を変更した場合は、CDワークフローと同時に見直す。
+GitHub Actionsからの認証はOIDCを使用し、サービスアカウントキーを発行しない。
+Providerのconditionでは、再利用されない `repository_id` と `repository_owner_id`、
+`refs/heads/main`、許可したCD workflowの `workflow_ref` をすべて検証する。
+サービスアカウントの `roles/iam.workloadIdentityUser` は、名前ではなく
+`attribute.repository_id` のprincipalSetへ付与する。`google.subject` にも数値repository IDを使用する。
+
+`workflow_ref` はworkflowファイルのパスを含むため、リポジトリ改名時には設定更新が必要になるが、
+主体の信頼判断は数値IDでも行う。許可workflowの追加・改名時はCD側の変更と同時にallowlistを見直す。
+名前ベースの `repository` claimは既存環境の段階移行中だけ明示的に併用し、数値IDでのCD確認後に撤去する。
 
 ## 公開前チェック
 

@@ -1,13 +1,23 @@
 # このファイルを terraform.tfvars にコピーし、ローカルで実値へ置き換える。
 # terraform.tfvars は .gitignore 対象。
-project_id         = "replace-with-project-id"
-region             = "asia-northeast1"
-vertex_ai_location = "global"
-resource_prefix    = "stock"
-github_repository  = "your-org/your-backend-repository"
-github_ref         = "refs/heads/main"
-db_name            = "app"
-db_user            = "appuser"
+project_id                 = "replace-with-project-id"
+region                     = "asia-northeast1"
+vertex_ai_location         = "global"
+resource_prefix            = "stock"
+github_repository_id       = "123456789"
+github_repository_owner_id = "12345678"
+github_ref                 = "refs/heads/main"
+github_workflow_refs = [
+  "your-org/your-backend-repository/.github/workflows/cd-api.yaml@refs/heads/main",
+  "your-org/your-backend-repository/.github/workflows/cd-batch.yaml@refs/heads/main",
+  "your-org/your-backend-repository/.github/workflows/cd-migrate.yaml@refs/heads/main",
+]
+db_name = "app"
+db_user = "appuser"
+
+# 既存環境をrepository名ベースのWIFから移行する最初のapplyだけ有効化する。
+# enable_github_wif_legacy_repository = true
+# github_repository                   = "your-org/your-backend-repository"
 
 # 手動投入したSecretの有効な数値versionを指定する。値そのものは記載しない。
 manual_secret_versions = {

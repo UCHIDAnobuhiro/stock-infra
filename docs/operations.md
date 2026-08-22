@@ -59,7 +59,11 @@ cp terraform/environments/prod/terraform.tfvars.example terraform/environments/p
 cp terraform/environments/prod/backend.hcl.example terraform/environments/prod/backend.hcl
 ```
 
-両ファイルへ実値を設定する。GitHubリポジトリは `owner/repo`、Git refは `refs/heads/main` のように指定する。
+両ファイルへ実値を設定する。GitHubリポジトリは再利用されない数値の `repository_id` と
+`repository_owner_id` を指定し、Git refは `refs/heads/main` から変更しない。
+`github_workflow_refs` にはGCP認証を許可するCD workflowだけを
+`owner/repo/.github/workflows/file.yaml@refs/heads/main` 形式で列挙する。CIなどデプロイ権限が
+不要なworkflowは含めない。
 `region` にはCloud Run等のGCPリソース配置先、`vertex_ai_location` には使用するGeminiモデルの
 対応ロケーションを指定する。現在のデフォルトは `global` とする。
 `cors_allowed_origins` には本番frontendのHTTPS originを末尾スラッシュなしで設定する。
@@ -79,6 +83,44 @@ terraform -chdir=terraform/environments/prod plan
 ```
 
 planに `must be replaced` や想定外のIAM変更がないことを確認し、人間がapplyする。
+
+### 既存WIFをGitHubの数値IDへ移行する
+
+既存環境で名前ベースのWIFを使用している場合は、数値IDのbindingを先に追加し、旧bindingを後から
+撤去する。GitHub APIで対象リポジトリのIDを確認し、出力値をローカルの `terraform.tfvars` だけに保存する。
+
+```bash
+gh api repos/OWNER/REPOSITORY \
+  --jq '{repository_id: (.id | tostring), repository_owner_id: (.owner.id | tostring)}'
+```
+
+最初の段階では新しい数値ID・許可workflowに加え、次の移行用設定を一時的に指定する。
+
+```hcl
+github_repository_id       = "123456789"
+github_repository_owner_id = "12345678"
+github_workflow_refs = [
+  "your-org/your-backend-repository/.github/workflows/cd-api.yaml@refs/heads/main",
+  "your-org/your-backend-repository/.github/workflows/cd-batch.yaml@refs/heads/main",
+  "your-org/your-backend-repository/.github/workflows/cd-migrate.yaml@refs/heads/main",
+]
+
+enable_github_wif_legacy_repository = true
+github_repository                   = "your-org/your-backend-repository"
+```
+
+planでは、数値repository IDのprincipalSet追加とProviderのin-place更新だけであり、WIF Pool、
+Provider、デプロイ用サービスアカウントの再作成がないことを確認する。人間がapplyした後、main上の
+API・batch・migrate CDを実行し、OIDC認証とデプロイが成功することを確認する。
+
+次に `enable_github_wif_legacy_repository = false` とし、`github_repository` を削除する。
+再度planし、名前ベースのprincipalSetと移行用conditionだけが削除され、数値IDのprincipalSetが残ることを
+確認してから人間がapplyする。適用後に3つのCDを再実行し、許可workflowが成功すること、main以外のrefと
+allowlist外workflowが認証できないことを確認して移行を完了する。
+
+最終適用後にCD認証が失敗した場合は、数値IDとworkflow refの入力誤りを確認する。直ちに復旧が必要なら、
+元のリポジトリ名を引き続き所有していることを確認した上で移行用2変数を戻してplan・applyする。
+リポジトリまたは所有者の削除・移管後は、第三者を信頼する危険があるため名前ベースへrollbackしない。
 
 ## 5. 外部credentialの投入
 

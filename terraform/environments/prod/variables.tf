@@ -34,20 +34,76 @@ variable "resource_prefix" {
   }
 }
 
-variable "github_repository" {
-  description = "WIF 経由でデプロイを許可する GitHub リポジトリ（owner/repo 形式）"
+variable "github_repository_id" {
+  description = "WIF 経由でデプロイを許可する GitHub リポジトリの数値ID"
   type        = string
 
   validation {
-    condition     = can(regex("^[^/]+/[^/]+$", var.github_repository))
-    error_message = "github_repository は owner/repo 形式で指定してください。"
+    condition     = can(regex("^[1-9][0-9]*$", var.github_repository_id))
+    error_message = "github_repository_id は1以上の数値IDを文字列で指定してください。"
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "WIF 経由でデプロイを許可する GitHub Organizationまたはユーザーの数値ID"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id は1以上の数値IDを文字列で指定してください。"
   }
 }
 
 variable "github_ref" {
-  description = "WIF 経由のデプロイを許可する Git ref"
+  description = "WIF 経由のデプロイを許可するmainブランチの Git ref"
   type        = string
   default     = "refs/heads/main"
+
+  validation {
+    condition     = var.github_ref == "refs/heads/main"
+    error_message = "github_ref は refs/heads/main から変更できません。"
+  }
+}
+
+variable "github_workflow_refs" {
+  description = "WIF 経由でデプロイを許可するGitHub Actions workflow_refの集合"
+  type        = set(string)
+
+  validation {
+    condition = (
+      length(var.github_workflow_refs) > 0 &&
+      alltrue([
+        for workflow_ref in var.github_workflow_refs :
+        can(regex("^[^/]+/[^/]+/\\.github/workflows/[^/@]+\\.ya?ml@refs/heads/main$", workflow_ref))
+      ])
+    )
+    error_message = "github_workflow_refs はowner/repo/.github/workflows/file.yaml@refs/heads/main形式で1件以上指定してください。"
+  }
+}
+
+variable "enable_github_wif_legacy_repository" {
+  description = "数値ID移行中だけrepository名による旧WIF認証を併用するか。認証確認後はfalseに戻す"
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_github_wif_legacy_repository || var.github_repository != ""
+    error_message = "enable_github_wif_legacy_repository=true の場合はgithub_repositoryを指定してください。"
+  }
+}
+
+variable "github_repository" {
+  description = "旧WIF認証との段階移行中だけ使用する GitHub リポジトリ名（owner/repo 形式）"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.github_repository == "" ||
+      can(regex("^[^/]+/[^/]+$", var.github_repository))
+    )
+    error_message = "github_repository は空文字または owner/repo 形式で指定してください。"
+  }
 }
 
 variable "db_name" {

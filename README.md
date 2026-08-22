@@ -70,7 +70,10 @@ GCPプロジェクトとtfstateバケットを作る `bootstrap`、アプリケ�
 
 ### キーレスなデプロイ認証
 
-GitHub ActionsからGCPへの認証にはWIFを利用します。長期間有効なサービスアカウントJSONキーを発行せず、許可するGitHubリポジトリとGit refをOIDC claimで制限します。
+GitHub ActionsからGCPへの認証にはWIFを利用します。長期間有効なサービスアカウントJSONキーを発行せず、
+再利用されないGitHubの数値repository ID・owner ID、`main` ref、許可するCD workflowの
+`workflow_ref` をOIDC claimで検証します。サービスアカウントのprincipalSetも数値repository IDを
+使用し、リポジトリやOrganizationの改名・削除後に同名を取得した主体を信頼しません。
 
 ### 最小権限IAM
 
@@ -170,4 +173,5 @@ workflow名やjob名を変更した場合は、必須status checkの設定も同
 
 ## 関連コンポーネント
 
-アプリケーションは、Go製API・バッチとWebフロントエンドで構成します。接続先のGitHubリポジトリは環境固有値としてローカルの `terraform.tfvars` から設定します。
+アプリケーションは、Go製API・バッチとWebフロントエンドで構成します。接続先GitHubリポジトリの
+数値IDと許可するworkflowは、環境固有値としてローカルの `terraform.tfvars` から設定します。

@@ -50,7 +50,7 @@ sequenceDiagram
     participant REDIS as Memorystore
 
     GH->>WIF: GitHub OIDC token
-    WIF->>WIF: repository と ref を検証
+    WIF->>WIF: 数値repository / owner ID、main ref、workflow_refを検証
     WIF->>SA: 短期認証情報を発行
     SA->>AR: コンテナイメージをpush
     SA->>RUN: 既存サービスまたはJobのimageを更新
