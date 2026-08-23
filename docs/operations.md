@@ -263,6 +263,145 @@ Serverless NEGのBackend Serviceに `timeout_sec` を設定するとGCP APIが�
 切り替え後にロードバランサー経路の障害が発生した場合は、ロードバランサーやDNSを削除せず、
 `restrict_api_to_load_balancer = false` へ戻すplanを確認して人間がapplyする。
 
+## 8. 監視とSlack通知
+
+### Slack通知チャネルを作成する
+
+SlackのOAuth tokenを`terraform.tfvars`やTerraform stateへ保存しないため、通知チャネルは
+Cloud MonitoringとSlackのOAuth連携を使ってGCP Consoleで作成する。
+
+1. Cloud MonitoringのAlerting画面で`Edit notification channels`を開く。
+2. Slackの`Add new`から対象workspaceを選び、Cloud Monitoringのアクセスを許可する。
+3. 通知先channel名と表示名を設定する。private channelではSlack側で
+   `/invite @Google Cloud Monitoring`を実行する。
+4. `Send test notification`を実行し、対象channelにテスト通知が届いたことを確認する。
+5. 作成したSlack通知チャネルのresource nameを取得する。
+
+```bash
+gcloud beta monitoring channels list \
+  --filter='type=slack AND enabled=true' \
+  --format='table(name,displayName)'
+```
+
+resource nameは`projects/<project-id>/notificationChannels/<channel-id>`形式である。
+OAuth tokenやSlackのchannel URLは記録せず、resource nameだけをローカルの
+`terraform.tfvars`へ設定する。
+
+```hcl
+slack_notification_channel_id = "projects/<project-id>/notificationChannels/<channel-id>"
+```
+
+`slack_notification_channel_id`が空でもalert policyは作成できるが、Slackへ通知されない。
+本番への監視追加planは、必ず空でない実在するSlackチャネルIDを設定してから確認する。
+
+### 監視設定を反映する
+
+次の症状ベースの監視をTerraformで管理する。
+
+| 対象 | 条件 | 通知ノイズの抑制 |
+|---|---|---|
+| Cloud SQLディスク | 使用率80%超 | 5分継続 |
+| Cloud SQL接続数 | 全database合計20以上 | 5分継続 |
+| Cloud Run API 5xx | 全requestに対する5xx率5%超 | 5分集計・5分継続 |
+| Cloud Run APIレイテンシ | p95が2秒超 | 5分集計・5分継続 |
+| Cloud Run Job | batchまたはmigrate Execution失敗 | 単発で検知 |
+| Cloud Scheduler | AttemptFinishedがERROR | 単発で検知・通知は1時間に1回まで |
+| API Uptime Check | 2拠点以上で`/healthz`失敗 | 2分継続 |
+
+remote stateとローカル設定を使ってplanし、Uptime Check 1件とalert policy 7件の追加、
+各policyの`notification_channels`にSlackチャネルIDが設定されることを確認する。
+
+```bash
+terraform -chdir=terraform/environments/prod init -backend-config=backend.hcl -reconfigure
+terraform -chdir=terraform/environments/prod plan
+```
+
+既存リソースの更新・削除・再作成、`random_password`やSecret versionの変更があれば中止する。
+人間がplanを確認してapplyした後、Cloud MonitoringのAlerting画面でpolicyが有効であり、
+Slack通知チャネルが設定されていることを確認する。`terraform apply`はエージェントに実行させない。
+
+### アラート発生時の一次対応
+
+通知を受けたら、最初にCloud Monitoringのincidentを開き、発生時刻、対象resource、
+condition、直前のデプロイ・手動Job実行の有無を記録する。復旧確認前にincidentを閉じず、
+同じ操作を連続実行しない。
+
+#### Cloud SQLディスク使用率
+
+1. MonitoringのMetrics Explorerで`database/disk/utilization`の推移と増加速度を確認する。
+2. 大量投入中のbatchや手動処理があれば、新しい実行を止める。実行中処理の強制終了は影響を確認する。
+3. 不要データ削除、保持期間変更、disk拡張のどれを行うかを単独の変更として計画する。
+4. `disk_autoresize`や`disk_size`の変更はplanを確認し、Cloud SQL再作成が出た場合は中止する。
+
+#### Cloud SQL接続数
+
+1. 重複したCloud Run Job ExecutionとAPIインスタンス数を確認する。
+2. `pg_stat_activity`をapplication、state別に集計し、接続リークや長時間transactionを特定する。
+3. 新しいbatch・migrate実行を止め、原因のRevisionまたは処理を特定する。
+4. 接続上限やpool設定を変える場合は、`SHOW max_connections`の実測と接続予算を同時に更新する。
+
+#### Cloud Run APIの5xx率
+
+```bash
+gcloud run services logs read backend \
+  --region <region> \
+  --limit 100
+```
+
+直近Revisionの例外、Cloud SQL・Redis接続エラー、外部APIエラーを確認する。
+直近デプロイが原因ならbackend CDの既存手順で正常なイメージへ戻し、Terraformから
+imageやtrafficを変更しない。
+
+#### Cloud Run APIのレイテンシ
+
+Metrics Explorerで`request_latencies`をresponse code別に確認し、Cloud Runのinstance数、
+Cloud SQL接続数、遅いquery、外部API待ちを切り分ける。timeoutや最大instance数の変更は
+原因を特定した後に単独のTerraform変更としてplanする。
+
+#### Cloud Run Job失敗
+
+```bash
+gcloud run jobs executions list --job batch --region <region>
+gcloud run jobs executions list --job migrate --region <region>
+```
+
+失敗したExecutionのログ、終了コード、実行引数、retry回数を確認する。入力データや外部APIが
+原因の場合は復旧を確認してから1回だけ再実行する。migrate失敗ではDB schemaを確認し、
+原因を確認せずに再実行や逆migrationを行わない。
+
+#### Cloud Scheduler実行失敗
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_scheduler_job" AND jsonPayload."@type"="type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished" AND severity>=ERROR' \
+  --freshness=24h \
+  --limit=50
+```
+
+`job_id`、status、HTTP応答を確認する。401/403ではscheduler SAと対象Jobの
+`roles/run.jobsExecutorWithOverrides`、5xx/timeoutではCloud Run Admin APIと対象Jobの状態を確認する。
+定期実行のretry中に手動実行を重ねない。
+
+#### API Uptime Check失敗
+
+```bash
+curl -fsS https://<api-domain>/healthz
+gcloud certificate-manager certificates describe <resource-prefix>-api-certificate \
+  --location=global \
+  --format='value(managed.state)'
+gcloud run services describe backend --region <region>
+```
+
+公開DNS、証明書、ロードバランサー、Cloud Run Revision、Cloud SQL・Redisの順に切り分ける。
+ロードバランサー経路だけの障害で緊急回避が必要な場合は、既存の手順どおり
+`restrict_api_to_load_balancer = false`へ戻すplanを人間が確認してapplyする。
+
+### 通知されない場合
+
+Slack通知チャネルがenabledであり、policyの`notification_channels`に同じresource nameが
+設定されていることを確認する。private channelでは`@Google Cloud Monitoring`が参加していること、
+GCP Consoleのテスト通知が届くことを再確認する。OAuth tokenを取得してTerraformへ移さない。
+
 ## Secret versionの固定とローテーション
 
 Cloud Run Service / JobsのSecret参照はすべて数値versionへ固定する。分類A/BはTerraform管理の

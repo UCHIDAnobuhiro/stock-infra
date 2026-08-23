@@ -28,6 +28,10 @@ flowchart LR
     RUNTIME --> SECRETS["Secret Manager"]
     RUNTIME --> AI["Vertex AI / Vision API"]
     SCHED["Cloud Scheduler"] -->|"OAuth token"| RUN
+    MON["Cloud Monitoring"] -->|"metrics / uptime / logs"| SQL
+    MON --> RUN
+    MON --> SCHED
+    MON -->|"alerts"| SLACK["Slack notification channel"]
     TF["Terraform"] --> SQL
     TF --> REDIS
     TF --> AR
@@ -38,6 +42,7 @@ flowchart LR
     TF --> RUN
     TF --> LB
     TF --> SCHED
+    TF --> MON
 ```
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
@@ -46,7 +51,8 @@ flowchart LR
 
 | 担当 | 管理対象 |
 |---|---|
-| Terraform | Cloud Runサービス・Jobsとその設定、API独自ドメイン用ロードバランサー・証明書、Cloud Scheduler、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| Terraform | Cloud Runサービス・Jobsとその設定、API独自ドメイン用ロードバランサー・証明書、Cloud Scheduler、Cloud MonitoringのUptime Check・alert policy、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| GCP Console / Slack | SlackのOAuth連携とCloud Monitoring通知チャネルの作成・通知テスト |
 | DNS事業者 | Terraform outputが示すAレコードと証明書認証用CNAMEの登録 |
 | backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
 
@@ -58,6 +64,11 @@ CDと共有するのはコンテナイメージとServiceのtrafficだけであ�
 
 バッチは単一のCloud Run Job `batch` として構築し、`candles` / `logo` /
 `auth-session-cleanup` は実行時の `job_id` 引数で切り替えます。
+
+Cloud SQLの容量・接続数、Cloud Run APIの5xx率・レイテンシ、Cloud Run Jobと
+Cloud Schedulerの失敗、独自ドメインの`/healthz`をCloud Monitoringで監視します。
+Slack通知チャネルはOAuth tokenをTerraform stateへ保存しないようGCP側で作成し、
+Terraformはローカル設定からチャネルIDだけを参照します。
 
 `auth-session-cleanup` は毎日3:30 JST、`candles` は毎日7:00 JST、`logo` は毎週日曜10:00 JSTに
 Cloud Schedulerが自動実行します。
