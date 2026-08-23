@@ -170,8 +170,10 @@ ORDER BY connections DESC;
 Terraform apply後は通常時とピーク時に同じクエリを実行し、Cloud SQLの接続数、
 Cloud Run APIの5xxエラー率、batchとmigrateの実行結果を確認する。
 
-Cloud Run Jobは複数Executionを同時に起動できる。バックフィルや手動migrateを行う際は、
-既存のbatch/migrateが実行中でないことを確認し、接続予算に含めていない重複実行を避ける。
+Cloud Run Jobは複数Executionを同時に起動できる。同じ`job_id`のbatchはアプリケーション側の
+PostgreSQL advisory lockで排他され、後続Executionは処理本体を実行せず終了コード0で完了する。
+異なる`job_id`同士、およびbatchとmigrateの間は排他されない。バックフィルや手動migrateを行う際は、
+異なる`job_id`のbatchやmigrateが実行中でないことを確認し、接続予算に含めていない同時実行を避ける。
 
 単一Jobのバッチ実行はbackendのbatch CDで `execute=true` と `job_id` を指定するか、次のように
 実行時引数を上書きする。
@@ -184,8 +186,11 @@ gcloud run jobs execute batch \
 ```
 
 auth-session-cleanupは毎日3:30 JST、candlesは毎日7:00 JST、logoは毎週日曜10:00 JSTに
-Cloud Schedulerが自動実行する。上記の手動実行はバックフィルや動作確認用であり、
-Cloud Schedulerの定期実行を妨げず、いつでも追加で実行できる。
+Cloud Schedulerが自動実行する。上記の手動実行はバックフィルや動作確認用である。
+同じ`job_id`の定期実行と重なった場合も新しいExecution自体は作成されるが、batchはlockを待たずに
+`event=batch_skipped`、`reason=already_running`を記録して終了コード0で正常終了する。
+待機キューにはならないため、先行Executionの完了後に実行する必要がある場合は、完了を確認してから
+改めて1回だけ実行する。異なる`job_id`は並行実行できるため、外部APIとDB接続の使用量を確認する。
 定期実行の状態確認や単発トリガーには次を使う。
 
 ```bash
@@ -195,6 +200,19 @@ gcloud scheduler jobs describe candles-daily --location asia-northeast1
 gcloud scheduler jobs run candles-daily --location asia-northeast1
 gcloud run jobs executions list --job batch --region asia-northeast1
 ```
+
+重複判定とlockエラーは構造化ログで確認する。
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_job" AND resource.labels.job_name="batch" AND (jsonPayload.event="batch_skipped" OR jsonPayload.event="batch_lock_failed")' \
+  --freshness=24h \
+  --limit=50
+```
+
+`batch_skipped`は同じ`job_id`の先行Executionが動作していることを示す正常系であり、再実行しない。
+`batch_lock_failed`はDB接続やlockクエリの異常なので、該当Executionの終了コード、Cloud SQL接続数、
+直前のエラーを確認する。
 
 ## 7. API独自ドメインの設定
 
@@ -382,7 +400,9 @@ gcloud logging read \
 
 `job_id`、status、HTTP応答を確認する。401/403ではscheduler SAと対象Jobの
 `roles/run.jobsExecutorWithOverrides`、5xx/timeoutではCloud Run Admin APIと対象Jobの状態を確認する。
-定期実行のretry中に手動実行を重ねない。
+Schedulerのretryが複数Executionを作成しても、同じ`job_id`の後続処理はbatch側で安全に終了する。
+HTTP失敗を補うための手動実行は、SchedulerとCloud Run Jobの実行状況、および`batch_skipped` /
+`batch_lock_failed`ログを確認してから1回だけ行う。
 
 #### API Uptime Check失敗
 

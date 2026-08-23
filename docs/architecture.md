@@ -110,11 +110,20 @@ sequenceDiagram
     participant SCHED as Cloud Scheduler
     participant RUN as Cloud Run Admin API (v2)
     participant JOB as batch Job execution
+    participant DB as Cloud SQL PostgreSQL
 
     SCHED->>SCHED: scheduler SAのOAuthトークンを取得
     SCHED->>RUN: POST .../jobs/batch:run (overrides.containerOverrides[].args)
     RUN->>JOB: job_id引数でExecutionを起動
-    JOB->>JOB: jobs_runner SAとして指定されたjob_idを実行
+    JOB->>DB: pg_try_advisory_lock(namespace, job_id key)
+    alt lock取得成功
+        DB-->>JOB: acquired=true
+        JOB->>JOB: jobs_runner SAとして指定されたjob_idを実行
+        JOB->>DB: pg_advisory_unlock(namespace, job_id key)
+    else 同じjob_idが実行中
+        DB-->>JOB: acquired=false
+        JOB->>JOB: batch_skippedを記録して終了コード0
+    end
 ```
 
 scheduler SAには対象Job単位で `roles/run.jobsExecutorWithOverrides` を付与する。
@@ -122,7 +131,23 @@ scheduler SAには対象Job単位で `roles/run.jobsExecutorWithOverrides` を�
 
 Cloud SchedulerのHTTP呼び出しはExecutionの起動をキューイングして即座に応答するため、
 Job本体のtimeout（10800秒）とは独立した短い `attempt_deadline` を設定する。
-backend CDや `gcloud run jobs execute` による手動実行とは独立したトリガーであり、互いを待ち合わせない。
+backend CDや `gcloud run jobs execute` による手動実行とは独立したトリガーであり、複数Executionを
+作成できる。batchは処理開始前に`job_id`単位のセッションレベルadvisory lockを待機なしで取得し、
+同じ`job_id`の先行Executionが実行中なら、後続Executionは`event=batch_skipped`、
+`reason=already_running`を記録して終了コード0で安全に終了する。lock取得処理自体のエラーは
+`event=batch_lock_failed`を記録して終了コード1とし、Cloud RunとSchedulerのretry対象にする。
+
+| job_id | 同じjob_idの同時起動 | 先行Execution終了後の再実行 |
+|---|---|---|
+| `candles` | 後続を処理開始前に正常終了 | 許可。既存データは複合主キーによるupsert |
+| `logo` | 後続を処理開始前に正常終了 | 許可。同じ銘柄行のロゴURLを再更新 |
+| `auth-session-cleanup` | 後続を処理開始前に正常終了 | 許可。削除済みセッションは対象にならない |
+
+異なる`job_id`は別のlock keyを使うため並行実行できる。lock専用DB接続はExecutionの終了まで保持し、
+正常終了時は同じセッションでunlockする。プロセスや接続の異常終了時もPostgreSQLがセッションlockを
+解放する。完了後の再実行は、Cloud Runのタスクretryや障害復旧、バックフィルを妨げないため許可する。
+Schedulerの`retry_count = 3`とCloud Run Jobの`max_retries = 1`は無効化せず、排他と各DB更新の
+冪等性を組み合わせて安全性を保つ。
 
 ## 監視と通知
 
