@@ -6,8 +6,8 @@ resource "google_project" "main" {
   org_id          = var.organization_id
   folder_id       = var.folder_id
 
-  # 構築済みprojectのForceNewを避けるため変更しない。prodの専用VPC移行後は依存せず、
-  # default VPC自体の削除はrollback期間終了後に人間が別作業として判断する。
+  # project作成時にだけ評価される属性であり、構築済みprojectのForceNewを避けるため変更しない。
+  # default VPCは本番リソースから切り離して廃止し、projectを再作成しない限り復元されない。
   auto_create_network = true
   deletion_policy     = "PREVENT"
 

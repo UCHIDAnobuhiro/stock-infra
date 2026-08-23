@@ -13,17 +13,6 @@ variable "region" {
   type        = string
 }
 
-variable "redis_network_migration_phase" {
-  description = "default VPCから専用VPCへのRedis移行フェーズ。legacy→prepare→cutoverの順で進め、rollbackはprepareへ戻す"
-  type        = string
-  default     = "legacy"
-
-  validation {
-    condition     = contains(["legacy", "prepare", "cutover"], var.redis_network_migration_phase)
-    error_message = "redis_network_migration_phase は legacy、prepare、cutover のいずれかにしてください。"
-  }
-}
-
 variable "cloud_run_subnet_cidr" {
   description = "専用VPCでCloud Run Direct VPC egressに割り当てる10.0.0.0/8内の/26以上のIPv4 CIDR"
   type        = string
@@ -130,9 +119,9 @@ variable "managed_secret_version_overrides" {
         "DB_USER",
         "DB_NAME",
         "INSTANCE_CONNECTION_NAME",
-        "REDIS_HOST",
-        "REDIS_PORT",
-        "REDIS_PASSWORD",
+        "REDIS_DEDICATED_HOST",
+        "REDIS_DEDICATED_PORT",
+        "REDIS_DEDICATED_PASSWORD",
         "TWELVE_DATA_BASE_URL",
       ], name) && can(regex("^[1-9][0-9]*$", version))
     ])
