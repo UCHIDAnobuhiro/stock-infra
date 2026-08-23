@@ -11,7 +11,11 @@ locals {
     INSTANCE_CONNECTION_NAME = "INSTANCE_CONNECTION_NAME"
   }
 
-  redis_secret_env = {
+  redis_secret_env = local.dedicated_cutover_enabled ? {
+    REDIS_HOST     = "REDIS_DEDICATED_HOST"
+    REDIS_PASSWORD = "REDIS_DEDICATED_PASSWORD"
+    REDIS_PORT     = "REDIS_DEDICATED_PORT"
+    } : {
     REDIS_HOST     = "REDIS_HOST"
     REDIS_PASSWORD = "REDIS_PASSWORD"
     REDIS_PORT     = "REDIS_PORT"
@@ -176,8 +180,9 @@ resource "google_cloud_run_v2_service" "api" {
     vpc_access {
       egress = "PRIVATE_RANGES_ONLY"
       network_interfaces {
-        network    = local.default_network_name
-        subnetwork = local.default_subnetwork_name
+        network    = local.cloud_run_network_name
+        subnetwork = local.cloud_run_subnetwork_name
+        tags       = local.dedicated_cutover_enabled ? local.cloud_run_network_tags : null
       }
     }
   }
@@ -199,6 +204,8 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_redis_egress,
+    google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.api_accessor,
     google_secret_manager_secret_version.managed,
   ]
@@ -290,8 +297,9 @@ resource "google_cloud_run_v2_job" "batch_single" {
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
         network_interfaces {
-          network    = local.default_network_name
-          subnetwork = local.default_subnetwork_name
+          network    = local.cloud_run_network_name
+          subnetwork = local.cloud_run_subnetwork_name
+          tags       = local.dedicated_cutover_enabled ? local.cloud_run_network_tags : null
         }
       }
     }
@@ -307,6 +315,8 @@ resource "google_cloud_run_v2_job" "batch_single" {
   depends_on = [
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_redis_egress,
+    google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.jobs_accessor,
     google_secret_manager_secret_version.managed,
   ]
