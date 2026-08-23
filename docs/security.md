@@ -51,6 +51,14 @@ Terraformが管理する`google_secret_manager_secret_version`のversionを参�
   上書き実行が必要なJobにのみ `run.jobs.runWithOverrides` を含むロールを与える。`roles/run.developer` のような
   Job定義自体を変更できるロールは与えない
 
+## ネットワーク境界
+
+- Cloud Run API / batchとRedisはdefault VPCではなく本番専用custom-mode VPCを使用する
+- Direct VPC egressのnetwork tagをegress firewallの対象にし、専用RedisのTCP portだけを許可する
+- tag対象の他のVPC向け通信はdeny ruleで拒否し、専用VPCに将来リソースを追加しても暗黙に到達させない
+- Direct VPC egressで未サポートのfirewall loggingには依存せず、Cloud RunとRedisのメトリクス・アプリログで疎通を監視する
+- 旧Redisと旧Secretへの権限はrollback期間に限って維持し、旧環境の削除と同じ独立した変更で縮小する
+
 ## Workload Identity Federation
 
 GitHub Actionsからの認証はOIDCを使用し、サービスアカウントキーを発行しない。Providerのconditionで `repository` と `ref` の両方を検証する。許可対象を変更した場合は、CDワークフローと同時に見直す。

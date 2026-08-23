@@ -24,7 +24,8 @@ flowchart LR
     LB -->|"Serverless NEG"| RUN
     RUN -->|"runtime identity"| RUNTIME["Runtime service accounts"]
     RUNTIME --> SQL["Cloud SQL for PostgreSQL"]
-    RUNTIME -->|"Direct VPC egress"| REDIS["Memorystore for Redis"]
+    RUNTIME -->|"Direct VPC egress / network tag"| VPC["Dedicated production VPC"]
+    VPC -->|"TCP Redis only"| REDIS["Memorystore for Redis"]
     RUNTIME --> SECRETS["Secret Manager"]
     RUNTIME --> AI["Vertex AI / Vision API"]
     SCHED["Cloud Scheduler"] -->|"OAuth token"| RUN
@@ -105,6 +106,14 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 ### コストと可用性のトレードオフ
 
 個人開発規模を前提に、Cloud SQLはzonal・共有コア、RedisはBasic構成を選びます。PITRやHAより予測可能なコストを優先していますが、バックアップ保持、削除保護、Artifact Registryのクリーンアップは有効にします。要件が変わった場合は、この判断を再評価します。
+
+### 本番専用VPCへの段階移行
+
+Cloud RunとRedisは本番専用のcustom-mode VPCへ配置し、Direct VPC egressのnetwork tagに対する
+egress firewallで専用RedisのTCP portだけを許可します。構築済み環境ではRedisをその場で変更せず、
+`legacy`、`prepare`、`cutover` の3段階で新Redisの並行作成と接続先切り替えを分離します。
+旧Redisと旧Secret versionはrollback期間中に保持し、削除は別変更として人間が判断します。
+移行手順と停止影響は [docs/operations.md](docs/operations.md) に記載しています。
 
 ### シークレットの管理
 
