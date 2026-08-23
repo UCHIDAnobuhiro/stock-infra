@@ -34,6 +34,7 @@
 - API独自ドメイン用の外部Application Load Balancer、固定IP、Google管理TLS証明書
 - 単一のCloud Run batch Jobとmigrate Job
 - batch Jobを定期実行するCloud Scheduler
+- Cloud MonitoringのUptime Checkとalert policy
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
@@ -122,6 +123,24 @@ scheduler SAには対象Job単位で `roles/run.jobsExecutorWithOverrides` を�
 Cloud SchedulerのHTTP呼び出しはExecutionの起動をキューイングして即座に応答するため、
 Job本体のtimeout（10800秒）とは独立した短い `attempt_deadline` を設定する。
 backend CDや `gcloud run jobs execute` による手動実行とは独立したトリガーであり、互いを待ち合わせない。
+
+## 監視と通知
+
+Cloud Monitoringで次の症状を監視する。
+
+- Cloud SQLのディスク使用率80%超過と接続数20以上
+- Cloud Run APIの5xx率5%超過とp95レイテンシ2秒超過
+- Cloud Run batch / migrate Jobの失敗
+- Cloud Schedulerの`AttemptFinished` ERRORログ
+- 独自ドメイン`/healthz`の複数拠点からの到達不能
+
+メトリクスは5分の継続時間または集計窓を基本とし、一時的な揺らぎによる通知ノイズを抑える。
+Job失敗とScheduler失敗は単発でも対応が必要なため即時検知し、Schedulerのログベース通知には
+1時間のrate limitを設定する。
+
+Slack通知チャネルはCloud MonitoringとSlackのOAuth連携を必要とする。OAuth tokenを
+`terraform.tfvars`やTerraform stateへ保存しないため、チャネルはGCP Consoleで人間が作成する。
+Terraformは`slack_notification_channel_id`に設定したresource nameだけをalert policyから参照する。
 
 ## ネットワーク
 

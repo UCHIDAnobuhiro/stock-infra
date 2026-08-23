@@ -252,3 +252,20 @@ variable "enable_cloud_run" {
   type        = bool
   default     = true
 }
+
+variable "slack_notification_channel_id" {
+  description = "Cloud MonitoringでOAuth連携済みのSlack通知チャネルID。tokenをTerraform stateへ保存しないためチャネル自体はGCP側で作成する"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.slack_notification_channel_id == "" ||
+      can(regex(
+        "^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/notificationChannels/[0-9]+$",
+        var.slack_notification_channel_id,
+      ))
+    )
+    error_message = "slack_notification_channel_id は空文字か、projects/<project-id>/notificationChannels/<channel-id> 形式にしてください。"
+  }
+}
