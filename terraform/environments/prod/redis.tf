@@ -13,6 +13,10 @@ resource "google_redis_instance" "main" {
   auth_enabled            = true
   transit_encryption_mode = "DISABLED"
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["redis.googleapis.com"],
