@@ -57,7 +57,7 @@ Terraformが管理する`google_secret_manager_secret_version`のversionを参�
 - Direct VPC egressのnetwork tagをegress firewallの対象にし、専用RedisのTCP portだけを許可する
 - tag対象の他のVPC向け通信はdeny ruleで拒否し、専用VPCに将来リソースを追加しても暗黙に到達させない
 - Direct VPC egressで未サポートのfirewall loggingには依存せず、Cloud RunとRedisのメトリクス・アプリログで疎通を監視する
-- 旧Redisと旧Secretへの権限はrollback期間に限って維持し、旧環境の削除と同じ独立した変更で縮小する
+- API / batchのSecret accessorは`REDIS_DEDICATED_*`だけに限定し、廃止済み接続先への権限を残さない
 
 ## Workload Identity Federation
 
