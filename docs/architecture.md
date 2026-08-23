@@ -178,18 +178,10 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
 
-構築済み環境のRedisはauthorized networkの変更で再作成せず、次のフェーズで移行する。
-
-| フェーズ | 専用VPC・Redis | Cloud Runの接続先 |
-|---|---|---|
-| `legacy` | 未作成 | default VPC上の旧Redis |
-| `prepare` | 旧環境と並行作成 | default VPC上の旧Redis |
-| `cutover` | 維持 | 専用VPC上の新Redis |
-
-専用Redisの接続情報は既存`REDIS_*`を上書きせず、別のSecretと数値versionで作成する。
-cutoverはCloud Run Service / Jobのnetwork interfaceとSecret参照を同じRevision更新で切り替える。
-rollbackは`prepare`へ戻すことで旧ネットワークと旧Secretを再参照し、新Redisは調査用に保持する。
-旧Redisとdefault VPCの削除はrollback期間終了後の独立した変更であり、この移行には含めない。
+Cloud Run Service / batch Jobは常に専用VPC、subnet、network tagを使用し、
+`REDIS_DEDICATED_*` Secretの数値versionからRedisへ接続する。default VPCと旧`REDIS_*`は
+定常構成に含めない。ネットワークやRedisを再移行する場合は通常変更に混ぜず、停止時間、
+state address、データの扱い、rollback方法を含む独立した計画を作成する。
 
 ## 拡張方針
 

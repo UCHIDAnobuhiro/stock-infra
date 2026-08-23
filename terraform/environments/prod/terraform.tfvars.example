@@ -9,10 +9,7 @@ github_ref         = "refs/heads/main"
 db_name            = "app"
 db_user            = "appuser"
 
-# default VPCから専用VPCへの移行時だけlegacy→prepare→cutoverの順で変更する。
-# prepare以降のrollbackはlegacyではなくprepareへ戻す。
-redis_network_migration_phase = "legacy"
-cloud_run_subnet_cidr          = "10.10.0.0/26"
+cloud_run_subnet_cidr = "10.10.0.0/26"
 
 # 手動投入したSecretの有効な数値versionを指定する。値そのものは記載しない。
 manual_secret_versions = {

@@ -20,9 +20,12 @@ variables {
   initial_batch_image   = "asia-northeast1-docker.pkg.dev/example-project-123/stock-registry/batch:0123456789abcdef0123456789abcdef01234567"
   initial_migrate_image = "asia-northeast1-docker.pkg.dev/example-project-123/stock-registry/migrate:0123456789abcdef0123456789abcdef01234567"
 
-  cors_allowed_origins = ["https://www.example.com"]
-  cookie_domain        = "example.com"
-  enable_cloud_run     = false
+  cors_allowed_origins          = ["https://www.example.com"]
+  cookie_domain                 = "example.com"
+  enable_cloud_run              = false
+  enable_api_domain             = false
+  enable_oauth                  = false
+  restrict_api_to_load_balancer = false
 }
 
 run "accept_same_commit_sha" {

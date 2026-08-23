@@ -79,23 +79,16 @@ output "cloud_run_job_names" {
 }
 
 output "redis_host" {
-  description = "現在の移行フェーズでCloud Runが参照するMemorystoreのプライベートIP"
-  value = local.dedicated_cutover_enabled ? (
-    google_redis_instance.dedicated[0].host
-  ) : google_redis_instance.main.host
-}
-
-output "redis_network_migration_phase" {
-  description = "default VPCから専用VPCへの現在のRedis移行フェーズ"
-  value       = var.redis_network_migration_phase
+  description = "Cloud Runが参照する本番MemorystoreのプライベートIP"
+  value       = google_redis_instance.prod.host
 }
 
 output "dedicated_network_name" {
-  description = "prepare以降に作成する本番専用VPC名"
-  value       = try(google_compute_network.prod[0].name, null)
+  description = "本番専用VPC名"
+  value       = google_compute_network.prod.name
 }
 
 output "cloud_run_subnetwork_name" {
-  description = "prepare以降に作成するCloud Run Direct VPC egress用subnet名"
-  value       = try(google_compute_subnetwork.cloud_run[0].name, null)
+  description = "Cloud Run Direct VPC egress用subnet名"
+  value       = google_compute_subnetwork.cloud_run.name
 }

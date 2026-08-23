@@ -11,14 +11,10 @@ locals {
     INSTANCE_CONNECTION_NAME = "INSTANCE_CONNECTION_NAME"
   }
 
-  redis_secret_env = local.dedicated_cutover_enabled ? {
+  redis_secret_env = {
     REDIS_HOST     = "REDIS_DEDICATED_HOST"
     REDIS_PASSWORD = "REDIS_DEDICATED_PASSWORD"
     REDIS_PORT     = "REDIS_DEDICATED_PORT"
-    } : {
-    REDIS_HOST     = "REDIS_HOST"
-    REDIS_PASSWORD = "REDIS_PASSWORD"
-    REDIS_PORT     = "REDIS_PORT"
   }
 
   oauth_env = var.enable_oauth ? {
@@ -180,9 +176,9 @@ resource "google_cloud_run_v2_service" "api" {
     vpc_access {
       egress = "PRIVATE_RANGES_ONLY"
       network_interfaces {
-        network    = local.cloud_run_network_name
-        subnetwork = local.cloud_run_subnetwork_name
-        tags       = local.dedicated_cutover_enabled ? local.cloud_run_network_tags : null
+        network    = google_compute_network.prod.name
+        subnetwork = google_compute_subnetwork.cloud_run.name
+        tags       = local.cloud_run_network_tags
       }
     }
   }
@@ -297,9 +293,9 @@ resource "google_cloud_run_v2_job" "batch_single" {
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
         network_interfaces {
-          network    = local.cloud_run_network_name
-          subnetwork = local.cloud_run_subnetwork_name
-          tags       = local.dedicated_cutover_enabled ? local.cloud_run_network_tags : null
+          network    = google_compute_network.prod.name
+          subnetwork = google_compute_subnetwork.cloud_run.name
+          tags       = local.cloud_run_network_tags
         }
       }
     }

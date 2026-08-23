@@ -424,158 +424,140 @@ Slack通知チャネルがenabledであり、policyの`notification_channels`に
 設定されていることを確認する。private channelでは`@Google Cloud Monitoring`が参加していること、
 GCP Consoleのテスト通知が届くことを再確認する。OAuth tokenを取得してTerraformへ移さない。
 
-## default VPCから本番専用VPCへのRedis移行
+## 本番専用VPCとRedisの運用
 
-この移行は既存Redisの`authorized_network`を変更しない。`redis_network_migration_phase`を
-`legacy`、`prepare`、`cutover`の順で進め、新Redisを並行作成してからCloud Runの接続先を切り替える。
-エージェントはplanの提示までとし、各applyは人間がplanを確認した後に実行する。
+Cloud Run API・batch JobとRedisは本番専用custom-mode VPCを定常構成とする。
+API / batchは専用subnetからDirect VPC egressを使い、`REDIS_DEDICATED_*`の数値versionを参照する。
+default VPCと旧`REDIS_*`は定常構成に含めない。エージェントはplanの提示までとし、
+各applyと実環境の削除は人間がplanと依存関係を確認した後に実行する。
 
-| フェーズ | 追加・変更 | 想定影響 |
-|---|---|---|
-| `legacy` | 既存構成を維持 | なし |
-| `prepare` | 専用VPC、`/26`以上のsubnet、firewall 2件、新Redis、専用SecretとIAMを追加 | 既存Cloud Runと旧Redisは変更しない。新Redisの追加費用が発生 |
-| `cutover` | API Revisionとbatch Jobのnetwork interface、network tag、Secret参照を更新 | APIはrolling update。batchは定期実行と重ねない。空のcacheによる一時的なlatency上昇があり得る |
+### 旧環境の廃止
 
-`prepare`以降に`legacy`へ戻すと、追加リソースの削除planになり`prevent_destroy`で停止する。
-rollbackは必ず`prepare`へ戻す。旧Redis、旧Secret version、旧Revisionをrollback期間中に削除しない。
+旧Redis、旧Secret、default VPCの廃止は即時rollbackを不能にする。rollback期間終了の承認を
+作業記録へ残し、backendデプロイ、batch / migrateの手動実行、Secretローテーションを止めてから、
+次の順序で進める。複数段階を1回のapplyへまとめない。
 
-### Redisデータの扱い
+#### 1. 稼働状態と依存関係を記録する
 
-現在のRedisデータは再生成可能なcacheとして扱い、RDBのexport/importは行わない。
-Memorystoreのimportは新Redisを処理中に利用不能にし、失敗時には内容が消える可能性があるため、
-cache移行ではリスクに見合わない。永続性が必要なkeyを将来追加した場合はこの手順を中止し、
-データ所有者、整合点、RDB移送、停止時間、失敗時復旧を含む別の移行計画を作成する。
-
-cutover後はcache missによる再取得を許容し、API latency、5xx、Redis memory、batch結果を監視する。
-負荷の高いcache warmingを一括実行せず、通常リクエストと定期batchで段階的に再構築する。
-
-### 1. 事前確認
-
-ローカル設定とremote stateを使い、開始時のphase、旧Redis、API Revision、batch Job、
-旧Redis Secretの数値versionを記録する。Secret値は取得・表示しない。
+Secret値は取得・表示せず、Revisionのtraffic、VPC、Secret名と数値versionだけを確認する。
 
 ```bash
-terraform -chdir=terraform/environments/prod output redis_network_migration_phase
-gcloud redis instances describe <old-redis-name> --region <region> \
-  --format='yaml(name,state,authorizedNetwork,host,port)'
+terraform -chdir=terraform/environments/prod plan
 gcloud run services describe backend --region <region> \
   --format='yaml(status.latestReadyRevisionName,status.traffic)'
-gcloud run jobs describe batch --region <region> \
-  --format='yaml(name,updateTime)'
-gcloud secrets versions list REDIS_HOST --filter='state=ENABLED' --format='table(name,state)'
-gcloud secrets versions list REDIS_PORT --filter='state=ENABLED' --format='table(name,state)'
-gcloud secrets versions list REDIS_PASSWORD --filter='state=ENABLED' --format='table(name,state)'
+gcloud run revisions list --service backend --region <region>
+gcloud run jobs describe batch --region <region>
+gcloud redis instances list --region <region> \
+  --format='table(name,state,authorizedNetwork)'
+gcloud compute networks subnets list --network=default
+gcloud compute firewall-rules list --filter='network:default'
+gcloud compute networks peerings list --network=default
+gcloud compute addresses list --filter='subnetwork:default'
 ```
 
-同じ時間帯のbackendデプロイ、batch / migrateの手動実行、Secretローテーションを止める。
-Cloud Schedulerの次回実行まで十分な時間があることを確認する。既存planが`No changes`でない場合は、
-その差分を先に解消し、この移行と混在させない。backend CDがgcloudで更新した直後は、
-Cloud Run Service / JobのAPI client識別用metadataである`client` / `client_version`だけを
-Terraformが戻すin-place差分が出る場合がある。この2属性だけであることを実値なしで確認できた場合は
-runtime設定の差分とは分けて記録し、他のCloud Run属性に差分がないことを確認する。
-Cloud SQLとDB接続Secretはこの移行の対象外である。Cloud SQL、database、user、`DB_*` Secret、
-migrate Jobに差分が出た場合は、その場で中止して影響を人間へ相談する。
+開始時のplanは`No changes`でなければならない。API health check、Redisを使う通常リクエスト、
+直近のcandles Executionが成功していることを確認する。Cloud Monitoringの
+`redis.googleapis.com/clients/connected`と`redis.googleapis.com/commands/calls`で、
+旧Redisへのアプリ接続・通信がないことを確認する。Memorystore内部の管理コマンドしかない場合は、
+コマンド名と確認時刻を作業記録へ残す。
 
-### 2. prepare
+Cloud SQL、database、user、`DB_*` Secret、migrate Job、`random_password`、Artifact Registryに
+差分があれば中止する。稼働中Redis、本番専用VPC、Cloud Run、`REDIS_DEDICATED_*`の削除・更新・
+再作成、または`must be replaced` / `forces replacement`が1件でもあれば中止する。
 
-ローカルの`terraform.tfvars`を次へ変更する。CIDRはDirect VPC egressの最小要件である`/26`以上とし、
-既存のアドレス設計を確認して決める。実値をリポジトリへコミットしない。
+#### 2. default VPCを参照する旧Revisionを削除する
 
-```hcl
-redis_network_migration_phase = "prepare"
-cloud_run_subnet_cidr          = "10.10.0.0/26"
-```
+traffic 0でdefault VPCと旧`REDIS_*`を参照するRevisionだけを対象にする。最新Revision、
+trafficがあるRevision、本番専用VPCを参照するRevisionは削除しない。対象を1件ずつdescribeし、
+人間が名前を確認してから削除する。
 
 ```bash
-terraform -chdir=terraform/environments/prod init -backend-config=backend.hcl -reconfigure
-terraform -chdir=terraform/environments/prod plan
+gcloud run revisions describe <old-revision> --region <region> \
+  --format='yaml(metadata.name,metadata.annotations,status.conditions)'
+gcloud run revisions delete <old-revision> --region <region>
 ```
 
-planが次の追加だけであることを確認する。
+削除後、traffic 100%の最新Revisionだけが本番専用VPC、subnet、network tag、
+`REDIS_DEDICATED_*`を参照することを再確認する。Cloud Runが確保したdefault subnet上の
+`SERVERLESS`内部アドレスが解放されるまで次へ進まない。
 
-- 本番専用custom-mode VPCとCloud Run用subnet
-- Cloud Run tagから新RedisのTCP portを許可するegress ruleと、他のVPC向け通信を拒否するrule
-- 旧Redisと別名の新Redis
-- `REDIS_DEDICATED_*` Secret本体と数値version
-- API / batchランタイムSAから上記Secretへのsecret単位のaccessor
+#### 3. 旧Redisだけを削除する
 
-事前確認で記録した`client` / `client_version`だけのmetadata driftが残っている場合は、
-Cloud Run 2件のin-place更新が併記される。それ以外のCloud Run template差分があれば中止する。
-
-既存Redis、上記metadata以外のCloud Run属性、既存`REDIS_*` version、`random_password`の更新や、
-リソースの削除・再作成が1件でもあれば中止する。特に`must be replaced`または`forces replacement`が
-あればapplyしない。
-人間がapplyした後、新Redisが`READY`で専用VPCを参照し、firewallのallowがdenyより高い優先度で
-専用network tagを対象としていることを確認する。Secretは値を表示せずversionの存在だけを確認する。
+最初に`refresh-only` planで、`moved` blockによる専用VPC・subnet・Firewall・Redisと旧Secretの
+state address変更だけを記録する。Cloud Run JobのExecution件数等の読み取り専用属性が更新される
+場合は内容を記録する。実リソースの追加・更新・削除が表示される場合は中止する。
 
 ```bash
-gcloud redis instances describe <new-redis-name> --region <region> \
-  --format='yaml(name,state,authorizedNetwork,host,port)'
-gcloud compute firewall-rules describe <allow-rule-name> \
-  --format='yaml(network,direction,priority,destinationRanges,targetTags,allowed)'
-gcloud compute firewall-rules describe <deny-rule-name> \
-  --format='yaml(network,direction,priority,destinationRanges,targetTags,denied)'
-gcloud secrets versions list REDIS_DEDICATED_HOST --filter='state=ENABLED' --format='table(name,state)'
-gcloud secrets versions list REDIS_DEDICATED_PORT --filter='state=ENABLED' --format='table(name,state)'
-gcloud secrets versions list REDIS_DEDICATED_PASSWORD --filter='state=ENABLED' --format='table(name,state)'
+terraform -chdir=terraform/environments/prod plan \
+  -refresh-only \
+  -out=record-state-moves.tfplan
+terraform -chdir=terraform/environments/prod show record-state-moves.tfplan
+terraform -chdir=terraform/environments/prod apply record-state-moves.tfplan
 ```
 
-確認後に再度planし、`No changes`になるまでcutoverへ進まない。
-
-### 3. cutover
-
-サービスの一時停止を許容するメンテナンス時間を確保し、定期batchが実行中でない時間帯に、
-ローカル設定を次へ変更する。Cloud Runは通常rolling updateになるが、無停止を前提にせず、
-疎通確認が終わるまで利用者向けメンテナンスとして扱う。
-
-```hcl
-redis_network_migration_phase = "cutover"
-```
-
-planではAPI Serviceとbatch Jobのnetwork interface、network tag、Redis Secret参照だけが
-in-place更新されることを確認する。事前に確認済みの場合は`client` / `client_version`のmetadata差分も
-併記される。migrate Job、既存 / 新Redis、Secret version、IAM、
-`random_password`に差分があってはいけない。削除・再作成があれば中止する。
-
-人間がapplyした後、APIの新Revisionとbatch Jobが専用VPC / subnet / tag、および
-`REDIS_DEDICATED_*`の数値versionを参照していることを確認する。Secret値は表示しない。
+state moveを記録した後、例外的に`-target`を使い、次のplanを旧Redis 1件のdestroyへ限定する。
+target指定による不完全planの警告は想定内だが、対象追加、更新、再作成が含まれる場合は中止する。
+保存した各planのapplyは人間が実行する。
 
 ```bash
-gcloud run services describe backend --region <region> \
-  --format='yaml(spec.template.metadata.annotations,spec.template.spec.containers[0].env,status.latestReadyRevisionName,status.traffic)'
-gcloud run jobs describe batch --region <region> \
-  --format='yaml(spec.template.spec.template.metadata.annotations,spec.template.spec.template.spec.containers[0].env)'
+terraform -chdir=terraform/environments/prod plan \
+  -target=google_redis_instance.main \
+  -out=retire-old-redis.tfplan
+terraform -chdir=terraform/environments/prod show retire-old-redis.tfplan
+terraform -chdir=terraform/environments/prod apply retire-old-redis.tfplan
+```
+
+削除後は旧Redisが存在しないこと、専用Redisが`READY`であること、default VPCのRedis peeringが
+解放されたことを確認する。旧Redis削除後は旧環境へ即時rollbackできない。障害時は専用Redis、
+専用VPC、現行Revisionの復旧を正とする。
+
+#### 4. 旧Secret version・本体・IAMを削除する
+
+targetなしのplanを作成する。destroyは旧`REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD`の
+version・Secret本体と、API / batchの旧Secret accessorだけに限定する。
+`google_secret_manager_secret.managed`に残るSecretは`prevent_destroy`を維持する。
+
+```bash
+terraform -chdir=terraform/environments/prod plan -out=retire-old-secrets.tfplan
+terraform -chdir=terraform/environments/prod show retire-old-secrets.tfplan
+terraform -chdir=terraform/environments/prod apply retire-old-secrets.tfplan
+```
+
+Secret本体の削除は全versionを削除する。旧Secretが存在しないことと、API / batchランタイムSAが
+`REDIS_DEDICATED_*`だけへaccessorを持つことを確認する。Secret値は表示しない。
+
+#### 5. default VPCを削除する
+
+Cloud Run旧Revision、旧Redis、Redis peering、`SERVERLESS`内部アドレス、VM、router、VPN、
+forwarding rule等の依存が0であることを再確認する。依存が1件でも残る場合は削除せず、所有者と
+用途を確認する。既定Firewallルールを名前で1件ずつ削除した後、default VPCを削除する。
+
+```bash
+gcloud compute firewall-rules delete default-allow-icmp
+gcloud compute firewall-rules delete default-allow-internal
+gcloud compute firewall-rules delete default-allow-rdp
+gcloud compute firewall-rules delete default-allow-ssh
+gcloud compute networks delete default
+```
+
+network削除後、auto subnet、route、既定Firewallルールが残っていないことを確認する。
+bootstrapの`auto_create_network`は構築済みprojectのForceNewを避けるため変更しない。
+projectを再作成しない限りdefault VPCは復元されない。
+
+#### 6. 最終確認
+
+API health check、Redisを使う通常リクエスト、candles Jobを実行し、Redis接続エラー、API 5xx、
+p95 latency、Cloud Run instance起動失敗、Redis memory / connection数を確認する。
+
+```bash
 curl -fsS https://<api-domain>/healthz
 gcloud run jobs execute batch --region <region> --args=candles --wait
 gcloud run services logs read backend --region <region> --limit 100
+terraform -chdir=terraform/environments/prod plan
 ```
 
-API health check、Redisを利用する通常リクエスト、candles Jobを確認し、Redis接続エラー、API 5xx、
-p95 latency、Cloud Run instance起動失敗、Redis memory / connection数を監視する。
-最後にremote stateでplanが`No changes`となることを確認する。これを満たした時点で
-Cloud Runと稼働中Redisのdefault VPC依存は解消される。
-
-### 4. rollback
-
-次のいずれかがあれば、原因調査と並行して`redis_network_migration_phase = "prepare"`へ戻す。
-
-- 新Revisionが起動しない、またはhealth checkが失敗する
-- Redis接続エラーやAPI 5xxが継続する
-- latencyやRedis負荷が許容範囲を超える
-- batchがRedis接続を原因として失敗する
-
-rollback planがAPI Serviceとbatch Jobのnetwork interface / Secret参照を旧構成へ戻すだけであり、
-Redis、Secret version、`random_password`の更新や削除・再作成を含まないことを確認してから、
-人間がapplyする。旧Revisionへtrafficを戻すだけではbatch JobとSecret参照が戻らないため、
-Terraformのrollbackを省略しない。復旧後はAPI、通常リクエスト、batchを再確認し、新Redisは削除せず
-原因調査用に保持する。
-
-### 5. rollback期間終了後
-
-十分な監視期間を置き、旧Redisへの接続がないことを確認する。旧Redis、旧`REDIS_*` Secret / IAM、
-default VPCを削除する場合は、この移行と分離した単独の変更として移行手順・plan・rollback不能になる
-時点を人間が確認する。`prevent_destroy`を外す変更や削除をこの手順の延長で実行しない。
-bootstrapの`auto_create_network`は構築済みprojectの再作成を避けるため変更しない。
+最終planが`No changes`であり、Cloud SQL・DB関連、専用Redis、専用VPC、Cloud Runに意図しない差分が
+ないことを確認して完了とする。planファイルには実値が含まれ得るためコミットせず、安全に削除する。
 
 ## Secret versionの固定とローテーション
 
