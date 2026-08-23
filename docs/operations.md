@@ -136,7 +136,9 @@ Repository SecretsまたはVariablesへ設定する。Cloud SQL接続名やラ�
 
 backendのAPI・batch・migrate CDを `publish_only=true` で実行する。GitHub ActionsのSummaryに
 表示されたcommit SHA付きURIを `initial_api_image`、`initial_batch_image`、
-`initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。
+`initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。3つのURIは同じ40文字の
+commit SHAタグを使い、対象projectの `${resource_prefix}-registry` にある `backend`、`batch`、
+`migrate` イメージを指定する。digestで固定する場合は3つすべてを `@sha256:<digest>` 形式にする。
 
 再度Terraform planを確認して人間がapplyする。この段階ではAPIサービス1件、単一のbatch Job、
 migrate Job 1件、Cloud Scheduler 3件（auth-session-cleanup-daily、candles-daily、logo-weekly）と

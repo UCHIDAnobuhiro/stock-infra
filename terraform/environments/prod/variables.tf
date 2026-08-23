@@ -117,8 +117,14 @@ variable "initial_api_image" {
   type        = string
 
   validation {
-    condition     = trimspace(var.initial_api_image) != ""
-    error_message = "initial_api_image は空にできません。"
+    condition = can(regex(
+      "^(:[0-9a-f]{40}|@sha256:[0-9a-f]{64})$",
+      trimprefix(
+        var.initial_api_image,
+        "${var.region}-docker.pkg.dev/${var.project_id}/${var.resource_prefix}-registry/backend",
+      ),
+    ))
+    error_message = "initial_api_image は対象projectの <resource_prefix>-registry/backend を40文字のcommit SHAタグまたはsha256 digestで固定してください。"
   }
 }
 
@@ -127,8 +133,14 @@ variable "initial_batch_image" {
   type        = string
 
   validation {
-    condition     = trimspace(var.initial_batch_image) != ""
-    error_message = "initial_batch_image は空にできません。"
+    condition = can(regex(
+      "^(:[0-9a-f]{40}|@sha256:[0-9a-f]{64})$",
+      trimprefix(
+        var.initial_batch_image,
+        "${var.region}-docker.pkg.dev/${var.project_id}/${var.resource_prefix}-registry/batch",
+      ),
+    ))
+    error_message = "initial_batch_image は対象projectの <resource_prefix>-registry/batch を40文字のcommit SHAタグまたはsha256 digestで固定してください。"
   }
 }
 
@@ -137,8 +149,34 @@ variable "initial_migrate_image" {
   type        = string
 
   validation {
-    condition     = trimspace(var.initial_migrate_image) != ""
-    error_message = "initial_migrate_image は空にできません。"
+    condition = can(regex(
+      "^(:[0-9a-f]{40}|@sha256:[0-9a-f]{64})$",
+      trimprefix(
+        var.initial_migrate_image,
+        "${var.region}-docker.pkg.dev/${var.project_id}/${var.resource_prefix}-registry/migrate",
+      ),
+    ))
+    error_message = "initial_migrate_image は対象projectの <resource_prefix>-registry/migrate を40文字のcommit SHAタグまたはsha256 digestで固定してください。"
+  }
+
+  validation {
+    condition = (
+      (
+        alltrue([
+          for image in [var.initial_api_image, var.initial_batch_image, var.initial_migrate_image] :
+          can(regex(":[0-9a-f]{40}$", image))
+        ]) &&
+        length(toset([
+          for image in [var.initial_api_image, var.initial_batch_image, var.initial_migrate_image] :
+          try(regex("[0-9a-f]{40}$", image), "")
+        ])) == 1
+      ) ||
+      alltrue([
+        for image in [var.initial_api_image, var.initial_batch_image, var.initial_migrate_image] :
+        can(regex("@sha256:[0-9a-f]{64}$", image))
+      ])
+    )
+    error_message = "初回イメージは3つとも同一commit SHAタグを指定するか、3つともsha256 digestで固定してください。"
   }
 }
 

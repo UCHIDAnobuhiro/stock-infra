@@ -21,10 +21,10 @@ manual_secret_versions = {
 # 緊急rollbackでTerraform管理Secretを旧versionへ戻す場合だけ設定し、復旧後に削除する。
 # managed_secret_version_overrides = { DB_PASSWORD = "1" }
 
-# backendリポジトリのpublish_only実行でpushした同一commit SHAのイメージを指定する。
-initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/backend:replace-with-git-sha"
-initial_batch_image   = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/batch:replace-with-git-sha"
-initial_migrate_image = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/migrate:replace-with-git-sha"
+# backendリポジトリのpublish_only実行でpushした同一の40文字commit SHAへ置き換える。
+initial_api_image     = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/backend:0123456789abcdef0123456789abcdef01234567"
+initial_batch_image   = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/batch:0123456789abcdef0123456789abcdef01234567"
+initial_migrate_image = "asia-northeast1-docker.pkg.dev/replace-with-project-id/stock-registry/migrate:0123456789abcdef0123456789abcdef01234567"
 
 cors_allowed_origins   = ["https://www.example.com"]
 cookie_domain          = "example.com"
