@@ -64,6 +64,9 @@ CDと共有するのはコンテナイメージとServiceのtrafficだけであ�
 
 バッチは単一のCloud Run Job `batch` として構築し、`candles` / `logo` /
 `auth-session-cleanup` は実行時の `job_id` 引数で切り替えます。
+各batchプロセスはPostgreSQL advisory lockを`job_id`単位で取得し、Schedulerの再試行や
+手動実行が重なった場合、同じ`job_id`の後続Executionは処理本体を実行せず正常終了します。
+異なる`job_id`は並行実行でき、先行Executionの終了後は同じ`job_id`を再実行できます。
 
 Cloud SQLの容量・接続数、Cloud Run APIの5xx率・レイテンシ、Cloud Run Jobと
 Cloud Schedulerの失敗、独自ドメインの`/healthz`をCloud Monitoringで監視します。

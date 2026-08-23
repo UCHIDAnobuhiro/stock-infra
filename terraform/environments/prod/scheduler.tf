@@ -4,6 +4,9 @@
 # デフォルトargsは cloud-run.tf 側の batch_single Job定義（["candles"]）に依存するため、
 # すべてのSchedulerが overrides.containerOverrides で job_id を明示的に指定する。
 # こうすることで、将来デフォルトargsが変わってもScheduler側の挙動はこのファイルの記述だけで分かる。
+# Cloud Schedulerのat-least-once配信と一時障害からの復旧のためretryは有効に保つ。
+# backendのbatchはjob_id単位のPostgreSQL advisory lockを取得し、同じjob_idが実行中なら
+# 重複Executionを終了コード0で安全に終了する。手動実行との重複も同じ仕組みで排他する。
 #
 # google_cloud_scheduler_job には deletion_protection 相当の属性が存在しない。
 # stateを持たないリソースであり置き換えによるデータ損失もないため prevent_destroy は付けないが、
