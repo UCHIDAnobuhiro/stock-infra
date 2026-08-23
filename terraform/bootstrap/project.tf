@@ -6,7 +6,8 @@ resource "google_project" "main" {
   org_id          = var.organization_id
   folder_id       = var.folder_id
 
-  # default VPC は prod で Direct VPC egress に利用するため維持する。
+  # 構築済みprojectのForceNewを避けるため変更しない。prodの専用VPC移行後は依存せず、
+  # default VPC自体の削除はrollback期間終了後に人間が別作業として判断する。
   auto_create_network = true
   deletion_policy     = "PREVENT"
 

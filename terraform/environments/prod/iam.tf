@@ -71,9 +71,18 @@ locals {
     "REDIS_PORT",
   ]
 
+  # prepare以降は旧Revisionへ即時rollbackできるよう、旧Redisと専用Redisの両方を許可する。
+  # rollback期間終了後の旧Secret権限削除は、旧Redis削除と同じ別変更で行う。
+  dedicated_redis_secret_names = local.dedicated_network_enabled ? [
+    "REDIS_DEDICATED_HOST",
+    "REDIS_DEDICATED_PASSWORD",
+    "REDIS_DEDICATED_PORT",
+  ] : []
+
   api_secret_names = concat(
     local.database_secret_names,
     local.redis_secret_names,
+    local.dedicated_redis_secret_names,
     ["JWT_SECRET", "PASSWORD_PEPPER"],
     var.enable_oauth ? tolist(local.oauth_secret_names) : [],
   )
@@ -81,6 +90,7 @@ locals {
   jobs_secret_names = concat(
     local.database_secret_names,
     local.redis_secret_names,
+    local.dedicated_redis_secret_names,
     ["TWELVE_DATA_API_KEY", "TWELVE_DATA_BASE_URL"],
   )
 

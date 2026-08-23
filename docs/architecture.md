@@ -22,7 +22,7 @@
 `terraform/environments/prod` は次を管理する。
 
 - 利用するGCP API
-- default VPCとサブネットの参照
+- 本番専用custom-mode VPCとCloud Run用サブネット
 - Cloud SQL for PostgreSQL
 - Memorystore for Redis
 - Artifact Registry
@@ -57,7 +57,7 @@ sequenceDiagram
     SA->>RUN: 既存サービスまたはJobのimageを更新
     RUN->>SM: ランタイムSAでsecretを取得
     RUN->>SQL: Cloud SQL接続を使用
-    RUN->>REDIS: Direct VPC egressで接続
+    RUN->>REDIS: 専用VPCのDirect VPC egressで接続
 ```
 
 ## Cloud Runの共同管理境界
@@ -170,10 +170,26 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 ## ネットワーク
 
 - Cloud SQLはCloud Run組み込み接続を利用する
-- Redisはdefault VPC内に配置する
-- Redisを利用するAPIと、candlesを実行できる単一batch JobがDirect VPC egressを利用する
+- Redisは本番専用のcustom-mode VPC内に配置する
+- Redisを利用するAPIと、candlesを実行できる単一batch Jobが同じ専用subnetからDirect VPC egressを利用する
+- subnetはCloud RunのIP予約とRevision切り替えを考慮し、最低でも`/26`を確保する
+- API Revisionとbatch Executionに専用network tagを付け、egress firewallは新RedisのTCP portだけを許可する
+- 専用VPCは暗黙のegress allowに依存せず、上記以外のVPC向け通信を優先度の低いdeny ruleで拒否する
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
+
+構築済み環境のRedisはauthorized networkの変更で再作成せず、次のフェーズで移行する。
+
+| フェーズ | 専用VPC・Redis | Cloud Runの接続先 |
+|---|---|---|
+| `legacy` | 未作成 | default VPC上の旧Redis |
+| `prepare` | 旧環境と並行作成 | default VPC上の旧Redis |
+| `cutover` | 維持 | 専用VPC上の新Redis |
+
+専用Redisの接続情報は既存`REDIS_*`を上書きせず、別のSecretと数値versionで作成する。
+cutoverはCloud Run Service / Jobのnetwork interfaceとSecret参照を同じRevision更新で切り替える。
+rollbackは`prepare`へ戻すことで旧ネットワークと旧Secretを再参照し、新Redisは調査用に保持する。
+旧Redisとdefault VPCの削除はrollback期間終了後の独立した変更であり、この移行には含めない。
 
 ## 拡張方針
 

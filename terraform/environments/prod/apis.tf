@@ -5,7 +5,7 @@ locals {
     "certificatemanager.googleapis.com", # API独自ドメインのGoogle管理TLS証明書
     "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com", # batch Jobの定期実行(Cloud Scheduler)
-    "compute.googleapis.com",        # default VPC / Direct VPC egress
+    "compute.googleapis.com",        # 専用VPC / Direct VPC egress
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # WIF トークン発行
     "logging.googleapis.com",

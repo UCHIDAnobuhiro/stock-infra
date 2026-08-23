@@ -19,7 +19,7 @@ resource "random_password" "password_pepper" {
 
 # --- A + B: version まで Terraform 管理するシークレット ---
 locals {
-  managed_secrets = {
+  base_managed_secrets = {
     JWT_SECRET               = random_password.jwt_secret.result
     PASSWORD_PEPPER          = random_password.password_pepper.result
     DB_PASSWORD              = random_password.db_password.result
@@ -31,6 +31,16 @@ locals {
     REDIS_PASSWORD           = google_redis_instance.main.auth_string
     TWELVE_DATA_BASE_URL     = var.twelve_data_base_url
   }
+
+  # prepareで専用Redis用の別Secretを作る。既存REDIS_*のversionを上書きしないことで、
+  # cutoverとrollbackはCloud Runの参照先だけを切り替えられる。
+  dedicated_redis_managed_secrets = local.dedicated_network_enabled ? {
+    REDIS_DEDICATED_HOST     = google_redis_instance.dedicated[0].host
+    REDIS_DEDICATED_PORT     = tostring(google_redis_instance.dedicated[0].port)
+    REDIS_DEDICATED_PASSWORD = google_redis_instance.dedicated[0].auth_string
+  } : {}
+
+  managed_secrets = merge(local.base_managed_secrets, local.dedicated_redis_managed_secrets)
 }
 
 resource "google_secret_manager_secret" "managed" {

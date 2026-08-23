@@ -13,6 +13,34 @@ variable "region" {
   type        = string
 }
 
+variable "redis_network_migration_phase" {
+  description = "default VPCから専用VPCへのRedis移行フェーズ。legacy→prepare→cutoverの順で進め、rollbackはprepareへ戻す"
+  type        = string
+  default     = "legacy"
+
+  validation {
+    condition     = contains(["legacy", "prepare", "cutover"], var.redis_network_migration_phase)
+    error_message = "redis_network_migration_phase は legacy、prepare、cutover のいずれかにしてください。"
+  }
+}
+
+variable "cloud_run_subnet_cidr" {
+  description = "専用VPCでCloud Run Direct VPC egressに割り当てる10.0.0.0/8内の/26以上のIPv4 CIDR"
+  type        = string
+  default     = "10.10.0.0/26"
+
+  validation {
+    condition = try(
+      cidrhost(var.cloud_run_subnet_cidr, 0) == split("/", var.cloud_run_subnet_cidr)[0] &&
+      tonumber(split("/", var.cloud_run_subnet_cidr)[1]) >= 8 &&
+      tonumber(split("/", var.cloud_run_subnet_cidr)[1]) <= 26 &&
+      can(regex("^10\\.", cidrhost(var.cloud_run_subnet_cidr, 0))),
+      false,
+    )
+    error_message = "cloud_run_subnet_cidr は10.0.0.0/8内の正規化した/8〜/26 CIDRにしてください。"
+  }
+}
+
 variable "vertex_ai_location" {
   description = "Vertex AI Geminiモデルを呼び出すロケーション"
   type        = string
