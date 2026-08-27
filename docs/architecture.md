@@ -22,9 +22,10 @@
 `terraform/environments/prod` は次を管理する。
 
 - 利用するGCP API
-- 本番専用custom-mode VPCとCloud Run用サブネット
+- 本番専用custom-mode VPC、Cloud Run用サブネット、Memorystore調査VM用サブネット
 - Cloud SQL for PostgreSQL
 - Memorystore for Redis
+- Memorystoreを読み取り調査する最小スペックのCompute Engine VM
 - Artifact Registry
 - Secret Manager
 - ランタイム・デプロイ用サービスアカウント
@@ -175,6 +176,9 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 - subnetはCloud RunのIP予約とRevision切り替えを考慮し、最低でも`/26`を確保する
 - API Revisionとbatch Executionに専用network tagを付け、egress firewallは新RedisのTCP portだけを許可する
 - 専用VPCは暗黙のegress allowに依存せず、上記以外のVPC向け通信を優先度の低いdeny ruleで拒否する
+- 調査VMはCloud Run用`/26`を消費しない専用`/29`へ配置し、`e2-micro`、外部IPなし、サービスアカウントなしとする
+- 調査VMへのSSHはIAP TCP forwardingとOS Loginに限定し、egressはRedisのTCP port以外を拒否する
+- 調査用クライアントは書き込みコマンドをallowlistへ含めず、AUTH stringをmetadataやstateへ追加しない
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
 
@@ -182,6 +186,9 @@ Cloud Run Service / batch Jobは常に専用VPC、subnet、network tagを使用�
 `REDIS_DEDICATED_*` Secretの数値versionからRedisへ接続する。default VPCと旧`REDIS_*`は
 定常構成に含めない。ネットワークやRedisを再移行する場合は通常変更に混ぜず、停止時間、
 state address、データの扱い、rollback方法を含む独立した計画を作成する。
+
+Memorystore調査VMは運用者が必要な期間だけ使用する。接続権限は既存のIAMで個別に管理し、
+Terraformから不特定の利用者へOS LoginやIAPのロールを付与しない。
 
 ## 拡張方針
 

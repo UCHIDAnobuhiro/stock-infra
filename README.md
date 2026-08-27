@@ -26,6 +26,8 @@ flowchart LR
     RUNTIME --> SQL["Cloud SQL for PostgreSQL"]
     RUNTIME -->|"Direct VPC egress / network tag"| VPC["Dedicated production VPC"]
     VPC -->|"TCP Redis only"| REDIS["Memorystore for Redis"]
+    OPERATOR["Operator"] -->|"IAP SSH / OS Login"| INSPECTOR["Memorystore inspector VM"]
+    INSPECTOR -->|"Read-only commands / AUTH"| REDIS
     RUNTIME --> SECRETS["Secret Manager"]
     RUNTIME --> AI["Vertex AI / Vision API"]
     SCHED["Cloud Scheduler"] -->|"OAuth token"| RUN
@@ -44,6 +46,7 @@ flowchart LR
     TF --> LB
     TF --> SCHED
     TF --> MON
+    TF --> INSPECTOR
 ```
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
@@ -52,7 +55,7 @@ flowchart LR
 
 | 担当 | 管理対象 |
 |---|---|
-| Terraform | Cloud Runサービス・Jobsとその設定、API独自ドメイン用ロードバランサー・証明書、Cloud Scheduler、Cloud MonitoringのUptime Check・alert policy、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
+| Terraform | Cloud Runサービス・Jobsとその設定、Memorystore調査VM、API独自ドメイン用ロードバランサー・証明書、Cloud Scheduler、Cloud MonitoringのUptime Check・alert policy、GCPプロジェクト、stateバケット、API、Cloud SQL、Memorystore、Artifact Registry、Secret Manager、サービスアカウント、IAM、WIF |
 | GCP Console / Slack | SlackのOAuth連携とCloud Monitoring通知チャネルの作成・通知テスト |
 | DNS事業者 | Terraform outputが示すAレコードと証明書認証用CNAMEの登録 |
 | backend GitHub Actions CD | コンテナイメージのbuild/push、既存Cloud Runリソースのイメージ更新、APIのtraffic切替、Job実行 |
@@ -112,6 +115,8 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 Cloud RunとRedisは本番専用のcustom-mode VPCへ配置し、Direct VPC egressのnetwork tagに対する
 egress firewallでRedisのTCP portだけを許可します。default VPCは本番ランタイムから利用せず、
 Redis接続情報は`REDIS_DEDICATED_*` Secretの数値versionへ固定します。
+Memorystoreの調査VMはCloud Run用subnetを消費しない専用`/29`へ配置し、外部IPと
+サービスアカウントを持たせず、IAP経由のSSHとRedis宛て通信だけを許可します。
 ネットワーク変更時の確認手順は [docs/operations.md](docs/operations.md) に記載しています。
 
 ### シークレットの管理

@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+
+umask 027
+
+base64 --decode > /usr/local/bin/memorystore-inspect <<'CLIENT'
+${client_base64}
+CLIENT
+chmod 0755 /usr/local/bin/memorystore-inspect
+
+cat > /etc/profile.d/memorystore-inspector.sh <<'ENVIRONMENT'
+export REDIS_HOST='${redis_host}'
+export REDIS_PORT='${redis_port}'
+ENVIRONMENT
+chmod 0644 /etc/profile.d/memorystore-inspector.sh

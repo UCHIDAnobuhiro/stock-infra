@@ -431,6 +431,58 @@ API / batchは専用subnetからDirect VPC egressを使い、`REDIS_DEDICATED_*`
 default VPCと旧`REDIS_*`は定常構成に含めない。エージェントはplanの提示までとし、
 各applyと実環境の削除は人間がplanと依存関係を確認した後に実行する。
 
+### Memorystoreの内容を調査する
+
+調査VMは同じ本番専用VPCの専用`/29` subnetへ配置する`e2-micro`で、外部IPと
+サービスアカウントを持たない。SSHはIAP TCP forwardingとOS Loginに限定し、egressは
+稼働中MemorystoreのTCP portだけを許可する。Terraformが配置する`memorystore-inspect`は
+読み取りコマンドのallowlistを持ち、`SET`、`DEL`、`KEYS`等を受け付けない。
+
+apply前の全体planでは、IAP API、調査VM、専用subnet、Firewall 3件のcreateだけであることを確認する。
+Cloud SQL、Redis、Cloud Run、Secret version、`random_password`のupdate・delete・replaceが
+含まれる場合は中止する。applyは人間が最新planを確認した後に実行する。
+
+接続する利用者には`roles/iap.tunnelResourceAccessor`と`roles/compute.osLogin`、sudoが必要な場合だけ
+`roles/compute.osAdminLogin`が必要である。gcloudから接続する利用者は`compute.projects.get`も必要になる。
+権限は対象者へ個別に付与し、この構成から広いIAMを追加しない。
+
+ローカル端末でVM名とzoneを取得し、IAP経由で接続する。
+
+```bash
+VM_NAME="$(terraform -chdir=terraform/environments/prod output -raw memorystore_inspector_vm_name)"
+VM_ZONE="$(terraform -chdir=terraform/environments/prod output -raw memorystore_inspector_vm_zone)"
+gcloud compute ssh "$VM_NAME" --zone "$VM_ZONE" --tunnel-through-iap
+```
+
+別の信頼できるローカル端末で、Terraformが固定している数値versionのAUTH stringを取得する。
+値をコマンドライン引数、shell history、ファイルへ保存しない。VM上の非表示promptへ貼り付ける。
+
+```bash
+REDIS_AUTH_VERSION="$(terraform -chdir=terraform/environments/prod output -raw redis_auth_secret_version)"
+gcloud secrets versions access "$REDIS_AUTH_VERSION" --secret=REDIS_DEDICATED_PASSWORD
+```
+
+VM上では最初に疎通とkeyspaceを確認し、全keyを一度に走査する`KEYS`ではなく`SCAN`を使う。
+複数コマンドを実行する場合はAUTH stringを環境変数へ一時保持し、終了時に必ず解除する。
+
+```bash
+read -rs REDISCLI_AUTH
+export REDISCLI_AUTH
+
+memorystore-inspect PING
+memorystore-inspect INFO keyspace
+memorystore-inspect DBSIZE
+memorystore-inspect SCAN 0 MATCH '*' COUNT 100
+memorystore-inspect TYPE '<key>'
+memorystore-inspect GET '<string-key>'
+memorystore-inspect HGETALL '<hash-key>'
+
+unset REDISCLI_AUTH
+```
+
+調査後はSSH sessionとAUTH stringを破棄し、VMを残す必要性を見直す。停止・削除は本変更のapplyへ
+混ぜず、対象VMと専用subnet・Firewallだけに限定された別のplanを人間が確認して実施する。
+
 ### 旧環境の廃止
 
 旧Redis、旧Secret、default VPCの廃止は即時rollbackを不能にする。rollback期間終了の承認を
