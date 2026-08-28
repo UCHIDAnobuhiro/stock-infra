@@ -30,6 +30,36 @@ variable "cloud_run_subnet_cidr" {
   }
 }
 
+variable "memorystore_inspector_subnet_cidr" {
+  description = "Memorystore調査VM専用subnetに割り当てる、Cloud Run subnetと重複しない10.0.0.0/8内の/29 IPv4 CIDR"
+  type        = string
+  default     = "10.10.1.0/29"
+
+  validation {
+    condition = try(
+      cidrhost(var.memorystore_inspector_subnet_cidr, 0) == split("/", var.memorystore_inspector_subnet_cidr)[0] &&
+      tonumber(split("/", var.memorystore_inspector_subnet_cidr)[1]) == 29 &&
+      can(regex("^10\\.", cidrhost(var.memorystore_inspector_subnet_cidr, 0))),
+      false,
+    )
+    error_message = "memorystore_inspector_subnet_cidr はCloud Run subnetと重複しない、10.0.0.0/8内の正規化した/29 CIDRにしてください。"
+  }
+}
+
+variable "memorystore_inspector_zone" {
+  description = "Memorystore調査VMを配置するregion内のzone。空の場合は<region>-aを使用する"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.memorystore_inspector_zone == "" ||
+      can(regex("^${var.region}-[a-z]$", var.memorystore_inspector_zone))
+    )
+    error_message = "memorystore_inspector_zone は空文字か、region内のzoneにしてください。"
+  }
+}
+
 variable "vertex_ai_location" {
   description = "Vertex AI Geminiモデルを呼び出すロケーション"
   type        = string

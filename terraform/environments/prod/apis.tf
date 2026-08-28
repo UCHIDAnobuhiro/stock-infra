@@ -6,6 +6,7 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com", # batch Jobの定期実行(Cloud Scheduler)
     "compute.googleapis.com",        # 専用VPC / Direct VPC egress
+    "iap.googleapis.com",            # 調査VMへのIAP TCP forwarding
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # WIF トークン発行
     "logging.googleapis.com",

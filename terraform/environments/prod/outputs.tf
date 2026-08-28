@@ -92,3 +92,18 @@ output "cloud_run_subnetwork_name" {
   description = "Cloud Run Direct VPC egress用subnet名"
   value       = google_compute_subnetwork.cloud_run.name
 }
+
+output "memorystore_inspector_vm_name" {
+  description = "IAP経由で接続するMemorystore調査VM名"
+  value       = google_compute_instance.memorystore_inspector.name
+}
+
+output "memorystore_inspector_vm_zone" {
+  description = "Memorystore調査VMのzone"
+  value       = google_compute_instance.memorystore_inspector.zone
+}
+
+output "redis_auth_secret_version" {
+  description = "調査時に取得するREDIS_DEDICATED_PASSWORDの数値version"
+  value       = local.all_secret_versions["REDIS_DEDICATED_PASSWORD"]
+}
