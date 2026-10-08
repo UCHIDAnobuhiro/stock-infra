@@ -57,3 +57,6 @@ jobs:
 
       - name: Validate prod
         run: terraform -chdir=terraform/environments/prod validate -no-color
+
+      - name: Test prod configuration with mock providers
+        run: terraform -chdir=terraform/environments/prod test -no-color

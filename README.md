@@ -168,10 +168,13 @@ terraform -chdir=terraform/bootstrap validate
 
 terraform -chdir=terraform/environments/prod init -backend=false
 terraform -chdir=terraform/environments/prod validate
+terraform -chdir=terraform/environments/prod test
 ```
 
-pull requestでは `.github/workflows/terraform.yml` が同じformat・validateを自動実行します。
+pull requestでは `.github/workflows/terraform.yml` が同じformat・validate・testを自動実行します。
 CIの `terraform init` は `-backend=false` で実行し、GCP認証情報や実環境のbackend設定を使用しません。
+`terraform test` はmock providerによるplanでネットワーク・イメージ・実行時設定を検証し、実リソースを変更しません。
+実行時設定にはLBの公開方式に応じたクライアントIP判定と、batchのlock専用接続を含むDB接続予算を含めます。
 Providerは各Terraform rootのlock fileを基準にキャッシュします。
 
 `main` への不正な変更を防ぐため、GitHubのbranch rulesetまたはbranch protectionで
