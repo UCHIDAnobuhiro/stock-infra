@@ -179,6 +179,9 @@ PostgreSQL advisory lockで排他され、後続Executionは処理本体を実�
 重複をスキップするExecutionもlock判定中は一時的に1接続を使用するため、手動での大量起動は避ける。
 backendのmigrate CDは固定concurrency groupでAPI CD経由と単独手動実行を直列化するが、
 `gcloud`やConsoleからの直接実行、batch CDやSchedulerとは排他されない。
+`queue: max`で待機実行を最大100件保持し、後続による待機中の取り消しを防ぐ。
+上限超過や手動キャンセル時は実行履歴とDB状態を確認して必要な実行だけを再実行する。
+dispatch順は保証されないため、`up`/`down`等の順序が必要な操作は前の完了後に起動する。
 
 単一Jobのバッチ実行はbackendのbatch CDで `execute=true` と `job_id` を指定するか、次のように
 実行時引数を上書きする。
