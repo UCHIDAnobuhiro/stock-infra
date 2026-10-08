@@ -44,7 +44,8 @@ locals {
       GOOGLE_CLOUD_LOCATION     = var.vertex_ai_location
       GOOGLE_CLOUD_PROJECT      = var.project_id
       GOOGLE_GENAI_USE_VERTEXAI = "true"
-      TRUSTED_PROXY_HOPS        = "1"
+      # LBがXFF末尾にclient-ip,load-balancer-ipを追記する。直公開の間は2番目を信頼しない。
+      TRUSTED_PROXY_HOPS = var.restrict_api_to_load_balancer ? "2" : "1"
     },
   )
 

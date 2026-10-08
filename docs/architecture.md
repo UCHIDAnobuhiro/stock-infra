@@ -144,7 +144,9 @@ backend CDや `gcloud run jobs execute` による手動実行とは独立した�
 | `logo` | 後続を処理開始前に正常終了 | 許可。同じ銘柄行のロゴURLを再更新 |
 | `auth-session-cleanup` | 後続を処理開始前に正常終了 | 許可。削除済みセッションは対象にならない |
 
-異なる`job_id`は別のlock keyを使うため並行実行できる。lock専用DB接続はExecutionの終了まで保持し、
+異なる`job_id`は別のlock keyを使うため並行実行できる。接続予算はbatch 1タスク分のため、
+異なる`job_id`の同時実行は避ける（[接続プールの運用手順](operations.md#cloud-sql接続プールの確認)を参照）。
+処理用DBプールとは別に1接続固定のlock専用DBプールを持つ。lock専用DB接続はExecutionの終了まで保持し、
 正常終了時は同じセッションでunlockする。プロセスや接続の異常終了時もPostgreSQLがセッションlockを
 解放する。完了後の再実行は、Cloud Runのタスクretryや障害復旧、バックフィルを妨げないため許可する。
 Schedulerの`retry_count = 3`とCloud Run Jobの`max_retries = 1`は無効化せず、排他と各DB更新の

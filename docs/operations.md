@@ -150,9 +150,11 @@ Terraform planを実行し、イメージとtraffic以外の差分がないこ�
 
 ### Cloud SQL接続プールの確認
 
-`db-f1-micro`では、API 1インスタンスあたり最大5接続、batchとmigrateは1タスクあたり
-最大2接続に制限する。APIが最大3インスタンスまで増え、batchとmigrateが同時に動作しても
-最大19接続とし、接続上限25のうち6接続を運用・監視用に残す。
+`db-f1-micro`では、API 1インスタンスあたり最大5接続、migrateは1タスクあたり最大2接続、
+batchは1タスクあたり処理用1接続とadvisory lock専用1接続に制限する。
+APIが最大3インスタンスまで増え、batch 1タスクとmigrate 1タスクが同時に動作しても
+`5 × 3 + (1 + 1) + 2 = 19` 接続とし、接続上限25のうち6接続を運用・監視用に残す。
+backendのlock専用プールは1接続固定であり、batchの`DB_MAX_OPEN_CONNS=1`は処理用プールだけに適用される。
 
 適用前に実環境へ接続し、想定している接続上限と一致することを確認する。
 
@@ -174,6 +176,9 @@ Cloud Run Jobは複数Executionを同時に起動できる。同じ`job_id`のba
 PostgreSQL advisory lockで排他され、後続Executionは処理本体を実行せず終了コード0で完了する。
 異なる`job_id`同士、およびbatchとmigrateの間は排他されない。バックフィルや手動migrateを行う際は、
 異なる`job_id`のbatchやmigrateが実行中でないことを確認し、接続予算に含めていない同時実行を避ける。
+重複をスキップするExecutionもlock判定中は一時的に1接続を使用するため、手動での大量起動は避ける。
+backendのmigrate CDは固定concurrency groupでAPI CD経由と単独手動実行を直列化するが、
+`gcloud`やConsoleからの直接実行、batch CDやSchedulerとは排他されない。
 
 単一Jobのバッチ実行はbackendのbatch CDで `execute=true` と `job_id` を指定するか、次のように
 実行時引数を上書きする。
@@ -272,10 +277,19 @@ HTTPがHTTPSへリダイレクトされることを確認する。
 restrict_api_to_load_balancer = true
 ```
 
-再度planを確認し、Cloud Runのingress以外に意図しない差分がないことを確認してから
+再度planを確認し、Cloud Runのingressと`TRUSTED_PROXY_HOPS`以外に意図しない差分がないことを確認してから
 人間がapplyする。独自ドメインが引き続き応答し、インターネットからCloud RunのデフォルトURIへ
 直接アクセスすると `404` 等で拒否されることを確認する。最後にTerraform planが
 `No changes` になることを確認する。
+
+`TRUSTED_PROXY_HOPS`はLB限定時に`2`、直接公開中（独自ドメインの移行期間を含む）は`1`とする。
+[外部Application Load Balancerの仕様](https://cloud.google.com/load-balancing/docs/https#x-forwarded-for_header)では
+X-Forwarded-For末尾に`client-ip,load-balancer-ip`が追加されるため、LB限定時は右から2番目を選ぶ。
+直接公開中に`2`へ切り替えると、直接リクエストの偽装エントリを信頼するおそれがある。
+移行期間のLB経由リクエストは末尾のLB IPで判定されるため、移行は疎通確認後に完了させる。
+適用時には実際にコンテナが受信するXFFの末尾と解決したIPを確認し、異なる接続元や偽装XFFを
+付けたリクエストでも期待したクライアントIPになることを確認する。追加プロキシがある場合や
+内部ネットワークから直接アクセスする場合は、経路ごとの信頼境界を見直す。
 
 Serverless NEGのBackend Serviceに `timeout_sec` を設定するとGCP APIが拒否する。
 リクエストのタイムアウトはCloud Run Service側で管理し、Backend Serviceには設定しない。

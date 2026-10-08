@@ -1,9 +1,10 @@
 # db-f1-microの接続上限25を前提に、APIの最大3インスタンス、batch 1タスク、
-# migrate 1タスクが同時に接続しても運用・監視用に6接続を残す。
+# migrate 1タスクが同時に接続しても、batchのlock専用接続を含め運用・監視用に6接続を残す。
 # tierや接続上限を変更する場合は、実環境のSHOW max_connectionsを確認して合わせて更新する。
 locals {
   database_connection_limit   = 25
   database_connection_reserve = 6
+  batch_lock_connections      = 1
 
   database_pool = {
     api = {
@@ -11,7 +12,7 @@ locals {
       max_idle = 2
     }
     batch = {
-      max_open = 2
+      max_open = 1
       max_idle = 1
     }
     migrate = {
@@ -23,6 +24,7 @@ locals {
   planned_database_connections = (
     local.database_pool.api.max_open * var.api_max_instance_count +
     local.database_pool.batch.max_open +
+    local.batch_lock_connections +
     local.database_pool.migrate.max_open
   )
 }
