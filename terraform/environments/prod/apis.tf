@@ -15,9 +15,10 @@ locals {
     "run.googleapis.com",   # Cloud Run / Jobs
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
-    "sqladmin.googleapis.com", # Cloud SQL
-    "sts.googleapis.com",      # WIF token exchange
-    "vision.googleapis.com",   # ロゴ検出
+    "sqladmin.googleapis.com",          # Cloud SQL
+    "servicenetworking.googleapis.com", # Cloud SQL Private Service Access
+    "sts.googleapis.com",               # WIF token exchange
+    "vision.googleapis.com",            # ロゴ検出
   ])
 }
 

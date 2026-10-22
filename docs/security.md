@@ -54,7 +54,7 @@ Terraformが管理する`google_secret_manager_secret_version`のversionを参�
 ## ネットワーク境界
 
 - Cloud Run API / batchとRedisはdefault VPCではなく本番専用custom-mode VPCを使用する
-- Direct VPC egressのnetwork tagをegress firewallの対象にし、専用RedisのTCP portだけを許可する
+- Direct VPC egressのRedis専用tagは専用RedisのTCP portのみ許可する。Cloud SQL private移行時は別のSQL専用tagにprivate IPのTCP 3307だけを許可し、migrateにRedis権限を付けない
 - tag対象の他のVPC向け通信はdeny ruleで拒否し、専用VPCに将来リソースを追加しても暗黙に到達させない
 - Memorystore調査VMは外部IPとサービスアカウントを持たず、IAPからのSSHとRedis宛てegressだけを許可する
 - 調査VMはOS Loginを使い、AUTH stringをinstance metadata、startup script、Terraform stateへ複製しない

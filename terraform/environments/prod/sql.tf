@@ -30,8 +30,7 @@ locals {
 }
 
 # Cloud SQL PostgreSQL 最小構成（コスト優先: 共有コア・zonal・HDD）。
-# Cloud Run からは公開IP + 組み込み Cloud SQL 接続（Unix ソケット）でアクセスし、
-# 承認ネットワークは追加しない。
+# 既定は公開IP + Unixソケット。private IPを先に追加し、全runtimeを移行してから公開IPを外す。
 resource "google_sql_database_instance" "main" {
   name             = "${var.resource_prefix}-db"
   database_version = "POSTGRES_17"
@@ -52,7 +51,8 @@ resource "google_sql_database_instance" "main" {
     deletion_protection_enabled = true
 
     ip_configuration {
-      ipv4_enabled = true
+      ipv4_enabled    = !var.disable_cloud_sql_public_ip
+      private_network = var.enable_cloud_sql_private_ip ? google_compute_network.prod.self_link : null
     }
 
     backup_configuration {
@@ -67,6 +67,10 @@ resource "google_sql_database_instance" "main" {
 
   lifecycle {
     precondition {
+      condition     = !var.disable_cloud_sql_public_ip || (var.enable_cloud_sql_private_ip && var.use_cloud_sql_private_connector)
+      error_message = "公開IPを無効にする前にprivate IPと全runtimeのprivate connectorを有効化してください。"
+    }
+    precondition {
       condition = (
         local.planned_database_connections <=
         local.database_connection_limit - local.database_connection_reserve
@@ -75,7 +79,7 @@ resource "google_sql_database_instance" "main" {
     }
   }
 
-  depends_on = [google_project_service.services["sqladmin.googleapis.com"]]
+  depends_on = [google_project_service.services["sqladmin.googleapis.com"], google_service_networking_connection.cloud_sql_private]
 }
 
 resource "google_sql_database" "app" {

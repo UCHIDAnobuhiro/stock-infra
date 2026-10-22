@@ -354,3 +354,40 @@ variable "slack_notification_channel_id" {
     error_message = "slack_notification_channel_id は空文字か、projects/<project-id>/notificationChannels/<channel-id> 形式にしてください。"
   }
 }
+
+# Cloud SQL移行は段階ごとにplan/applyする。既定値は既存の公開IP/Unix socket経路。
+variable "enable_cloud_sql_private_ip" {
+  description = "既存Cloud SQLへPrivate Service Accessとprivate IPを追加する"
+  type        = bool
+  default     = false
+}
+
+variable "use_cloud_sql_private_connector" {
+  description = "API、batch、migrateをGo Connectorのprivate IP接続へ切り替える"
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.use_cloud_sql_private_connector || var.enable_cloud_sql_private_ip
+    error_message = "private connectorには先にenable_cloud_sql_private_ip=trueが必要です。"
+  }
+}
+
+variable "disable_cloud_sql_public_ip" {
+  description = "全runtimeのprivate接続確認後、Cloud SQLの公開IPを無効化する"
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.disable_cloud_sql_public_ip || (var.enable_cloud_sql_private_ip && var.use_cloud_sql_private_connector)
+    error_message = "公開IP無効化にはprivate IPと全runtimeのprivate connector設定が必要です。"
+  }
+}
+
+variable "cloud_sql_psa_cidr" {
+  description = "Cloud SQL Private Service Accessに予約する、既存subnetと非重複の/16 CIDR。実ネットワークとの競合もplan前に確認する"
+  type        = string
+  default     = "10.20.0.0/16"
+  validation {
+    condition     = try(cidrhost(var.cloud_sql_psa_cidr, 0) == split("/", var.cloud_sql_psa_cidr)[0] && tonumber(split("/", var.cloud_sql_psa_cidr)[1]) == 16 && can(regex("^10\\.", cidrhost(var.cloud_sql_psa_cidr, 0))), false)
+    error_message = "cloud_sql_psa_cidrは10.0.0.0/8内の正規化された/16 CIDRにしてください。"
+  }
+}

@@ -172,11 +172,11 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 
 ## ネットワーク
 
-- Cloud SQLはCloud Run組み込み接続を利用する
+- Cloud SQLは移行前にCloud Run組み込み接続を利用し、private IP移行後はGo ConnectorをDirect VPC egress経由で利用する
 - Redisは本番専用のcustom-mode VPC内に配置する
 - Redisを利用するAPIと、candlesを実行できる単一batch Jobが同じ専用subnetからDirect VPC egressを利用する
 - subnetはCloud RunのIP予約とRevision切り替えを考慮し、最低でも`/26`を確保する
-- API Revisionとbatch Executionに専用network tagを付け、egress firewallは新RedisのTCP portだけを許可する
+- API Revisionとbatch ExecutionはRedis専用tagを使用し、private接続移行時はSQL専用tagも使用する。migrate JobにはSQL専用tagのみ付ける。RedisはそのIPとport、SQLはprivate IPのTCP 3307だけを許可する
 - 専用VPCは暗黙のegress allowに依存せず、上記以外のVPC向け通信を優先度の低いdeny ruleで拒否する
 - 調査VMはCloud Run用`/26`を消費しない専用`/29`へ配置し、`e2-micro`、外部IPなし、サービスアカウントなしとする
 - 調査VMへのSSHはIAP TCP forwardingとOS Loginに限定し、egressはRedisのTCP port以外を拒否する

@@ -10,6 +10,11 @@ db_name            = "app"
 db_user            = "appuser"
 
 cloud_run_subnet_cidr = "10.10.0.0/26"
+# Cloud SQL private IP移行は各段階で別のplan/applyを確認する。
+cloud_sql_psa_cidr = "10.20.0.0/16" # 実VPCと既存peeringの範囲を確認
+enable_cloud_sql_private_ip = false
+use_cloud_sql_private_connector = false
+disable_cloud_sql_public_ip = false
 memorystore_inspector_subnet_cidr = "10.10.1.0/29"
 # memorystore_inspector_zone = "asia-northeast1-a"
 

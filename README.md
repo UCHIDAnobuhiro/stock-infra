@@ -113,7 +113,7 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 ### 本番専用VPC
 
 Cloud RunとRedisは本番専用のcustom-mode VPCへ配置し、Direct VPC egressのnetwork tagに対する
-egress firewallでRedisのTCP portだけを許可します。default VPCは本番ランタイムから利用せず、
+egress firewallでRedisのTCP portを許可します。Cloud SQL private IPへの移行時は別tagでSQLのTCP 3307のみ許可します。default VPCは本番ランタイムから利用せず、
 Redis接続情報は`REDIS_DEDICATED_*` Secretの数値versionへ固定します。
 Memorystoreの調査VMはCloud Run用subnetを消費しない専用`/29`へ配置し、外部IPと
 サービスアカウントを持たせず、IAP経由のSSHとRedis宛て通信だけを許可します。
@@ -201,3 +201,5 @@ workflow名やjob名を変更した場合は、必須status checkの設定も同
 ## 関連コンポーネント
 
 アプリケーションは、Go製API・バッチとWebフロントエンドで構成します。接続先のGitHubリポジトリは環境固有値としてローカルの `terraform.tfvars` から設定します。
+
+Cloud SQL private IP移行は [段階的な運用手順](docs/operations.md#cloud-sql-private-ipへの段階的な移行) を参照してください。3つの切替変数の既定値は既存の公開IP・Unixソケット接続を維持します。

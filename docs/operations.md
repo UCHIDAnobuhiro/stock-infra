@@ -713,3 +713,14 @@ gcloud run jobs describe migrate --region <region> \
 - plan未確認でのapply
 - `random_password` の不用意な変更や `-replace`
 - state、plan、認証情報のGitへの追加
+
+
+### Cloud SQL private IPへの段階的な移行
+
+対象は`terraform/environments/prod`の既存本番Cloud SQLとCloud Run API、batch、migrateです。以下の**各段階ごと**に実環境の`terraform.tfvars`、GCS backend、workspaceを確認し、認証済みの同一rootで保存planを作り、create/update/delete/replaceを分類してください。Cloud SQLや既存リソースにreplace/deleteが出たら実施を止めます。このリポジトリでのapplyは人間がplanを確認して行います。`-target` planを最終確認に使いません。実値、plan、stateはコミットしません。
+
+1. `cloud_sql_psa_cidr`を実VPC、既存subnet、既存peering、他のサービス予約範囲と照合し、空きの正規化された`10.0.0.0/8`内`/16`を選びます。Terraformの重複検証はこの構成内のCloud Run subnetと調査VM subnetを対象とします。既存Service Networking connectionがあれば、新規作成を進めずimport/構成調整を別途計画してください。`enable_cloud_sql_private_ip=true`だけを設定し、planでPSA予約範囲・peering新設とCloud SQLへのprivate IP追加、公開IP継続を確認します。このCloud SQL更新は再起動・一時的な接続断を伴う可能性があります。private networkは一度設定すると除去できないため、移行中の戻し先は公開IP/Unixソケット経路です。接続数とAPIのDBを使う操作を確認します。
+2. backendのAPI、batch、migrateの**同一変更を含む3イメージ**を先に配布し、既存のソケット経路で稼働することを確かめます。イメージ更新はbackend CDの責務です。`use_cloud_sql_private_connector=true`を設定したplanで3 runtimeに`DB_CONNECTION_MODE=private`、API/batchのSQL専用tag追加、migrateへのDirect VPC egress追加、private SQL IPの`/32`宛TCP 3307許可、他宛deny、既存Redis許可の維持を確認します。Cloud SQL公開IPは残します。適用後、新しいAPI RevisionのDBを使う読み取り操作、migrate Jobの読み取り専用`status`、batchの各Jobがprivate経路で接続できることを実行ログとCloud SQL接続数で検証します。`/healthz`だけではDB疎通を証明できません。batchの手動起動は外部API呼び出しとDB書き込みを伴うので、運用者が対象と時間帯を決めて実行します。batchでは処理用プールとadvisory lock専用プールの両方が成功することを確認してください。旧API Revisionや旧Job Executionが残っていないか確認し、スケジュール起動分も含めて観測します。
+3. 全3 runtimeと全使用Job引数でprivate経路が実証され、旧Revision/Executionが不要になってから`disable_cloud_sql_public_ip=true`を計画します。Cloud SQL公開IP停止は接続断や再起動を伴い得ます。apply後にDBを使うAPI操作、migrate `status`、各batch実行結果、Cloud SQL接続数・API 5xx・Job失敗率を再確認します。Go Connectorはprivate IPを明示し、接続失敗時に公開IPへフォールバックしません。Cloud SQL Studioなど管理API経由の操作はVPCからの直接接続とは別の経路です。Cloud Shellからprivate-only SQLへの直接TCP接続は前提にできません。
+
+第2段階の問題では`use_cloud_sql_private_connector=false`へ戻すplanを確認して適用し、ソケット経路のDB操作を再検証します。第3段階の問題ではまずprivate経路を修復する案を評価します。公開IPの再有効化は新しいplan/applyとCloud SQL更新が必要で、IPアドレスの変更や接続断の可能性があるため即時復旧を約束できません。private networkとPSAはロールバック後も保持し、削除しません。移行期間中、`/cloudsql` mountと既存Cloud SQL IAMはソケットへの切り戻し用に維持します。

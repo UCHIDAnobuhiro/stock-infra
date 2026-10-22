@@ -1,8 +1,8 @@
 locals {
-  common_env = {
+  common_env = merge({
     APP_ENV    = "production"
     LOG_FORMAT = "json"
-  }
+  }, var.use_cloud_sql_private_connector ? { DB_CONNECTION_MODE = "private" } : {})
 
   database_secret_env = {
     DB_NAME                  = "DB_NAME"
@@ -202,6 +202,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
     google_compute_firewall.cloud_run_allow_redis_egress,
+    google_compute_firewall.cloud_run_allow_sql_egress,
     google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.api_accessor,
     google_secret_manager_secret_version.managed,
@@ -313,6 +314,7 @@ resource "google_cloud_run_v2_job" "batch_single" {
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
     google_compute_firewall.cloud_run_allow_redis_egress,
+    google_compute_firewall.cloud_run_allow_sql_egress,
     google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.jobs_accessor,
     google_secret_manager_secret_version.managed,
@@ -403,6 +405,18 @@ resource "google_cloud_run_v2_job" "migrate" {
           instances = [google_sql_database_instance.main.connection_name]
         }
       }
+
+      dynamic "vpc_access" {
+        for_each = var.use_cloud_sql_private_connector ? [1] : []
+        content {
+          egress = "PRIVATE_RANGES_ONLY"
+          network_interfaces {
+            network    = google_compute_network.prod.name
+            subnetwork = google_compute_subnetwork.cloud_run.name
+            tags       = local.migrate_network_tags
+          }
+        }
+      }
     }
   }
 
@@ -415,6 +429,8 @@ resource "google_cloud_run_v2_job" "migrate" {
 
   depends_on = [
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_sql_egress,
+    google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.migrate_accessor,
     google_secret_manager_secret_version.managed,
   ]
