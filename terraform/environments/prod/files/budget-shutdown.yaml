@@ -1,0 +1,41 @@
+# 予算の実績額が予算額に達したら、Cloud Run APIのingressをINTERNAL_ONLYにして外部アクセスを閉じる。
+#
+# 予算通知は1日に複数回、重複して届くことがあるが、すでに閉じていれば何もしないため重複対策は不要。
+# データは削除しない。復旧手順は docs/operations.md「予算超過で外部アクセスを閉じる」を参照する。
+main:
+  params: [event]
+  steps:
+    - decode:
+        assign:
+          - budget: ${json.decode(text.decode(base64.decode(event.data.message.data)))}
+    - check_budget:
+        switch:
+          - condition: ${budget.costAmount < budget.budgetAmount}
+            return: under_budget
+    - get_service:
+        call: googleapis.run.v2.projects.locations.services.get
+        args:
+          name: ${sys.get_env("SERVICE_NAME")}
+        result: service
+    - check_closed:
+        switch:
+          - condition: ${service.ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY"}
+            return: already_closed
+    - check_dry_run:
+        switch:
+          - condition: ${sys.get_env("DRY_RUN") == "true"}
+            return: dry_run_would_close
+    # Service全体を取得して ingress だけを書き換え、ほかの設定を変えずに更新する。
+    - close_ingress:
+        assign:
+          - service.ingress: INGRESS_TRAFFIC_INTERNAL_ONLY
+    - update_service:
+        call: googleapis.run.v2.projects.locations.services.patch
+        args:
+          name: ${sys.get_env("SERVICE_NAME")}
+          body: ${service}
+          # 完了待ちにはプロジェクト単位のrun.operations.getが必要になるため、待たずに終了する。
+          connector_params:
+            skip_polling: true
+    - done:
+        return: closed

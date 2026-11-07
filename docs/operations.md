@@ -484,6 +484,63 @@ apply後、Billingコンソールの「予算とアラート」に予算が表�
 
 予算は課金を止めない。費用データには数時間の遅れがあり、通知時点の金額は確定値ではない。
 
+### 予算超過で外部アクセスを閉じる
+
+実績額が予算額に達したら、WorkflowsがCloud Run APIのingressを`INGRESS_TRAFFIC_INTERNAL_ONLY`にする。
+データは削除しないが、固定費とbatch Jobは止まらない。
+
+#### 有効にする
+
+予算を有効にしたうえで、ローカルの`terraform.tfvars`へ次を設定する。最初はdry runのままにする。
+
+```hcl
+enable_budget_shutdown  = true
+budget_shutdown_dry_run = true
+```
+
+planで次だけであることを確認する。
+
+| 区分 | 件数 | 内容 |
+|---|---|---|
+| create | 3 | `eventarc`、`pubsub`、`workflows`のAPI |
+| create | 8 | Pub/Sub topicと発行権限、SAとIAM 3つ、Workflows、Eventarcトリガー |
+| update | 1 | `google_billing_budget.monthly[0]`へ`all_updates_rule`（Pub/Sub）を追加 |
+
+#### dry runで確認する
+
+本物の通知と同じ形式のメッセージを発行する。
+
+```bash
+gcloud pubsub topics publish <resource-prefix>-budget-alerts \
+  --attribute=budgetId=manual-test \
+  --message='{"budgetDisplayName":"manual test","costAmount":20000,"costIntervalStart":"manual-test","budgetAmount":20000,"budgetAmountType":"SPECIFIED_AMOUNT","alertThresholdExceeded":1.0,"currencyCode":"JPY"}'
+```
+
+Workflowsの`<resource-prefix>-budget-shutdown`のExecutionが成功し、結果が`dry_run_would_close`であることを確認する。
+`costAmount`を予算額未満にした場合は`under_budget`になる。権限エラーで失敗した場合は、SAの
+Service単位`roles/run.developer`とAPIランタイムSAの`roles/iam.serviceAccountUser`を確認する。
+
+確認後、`budget_shutdown_dry_run = false`にしてplanし、Workflowsのupdate 1件だけであることを確認してapplyする。
+
+#### 閉じたときの対応
+
+Uptime Checkのアラートで閉じたことに気づく。独自ドメインを使っていない場合はアラートが出ないため、
+予算100%のメールを受けたら次のコマンドで`internal`になっているか確認する。
+
+```bash
+gcloud run services describe backend --region <region> \
+  --format='value(metadata.annotations."run.googleapis.com/ingress")'
+```
+
+1. 「予算超過の通知を受けたら」に従い、費用が増えた原因を特定して止める。
+2. 同じ月のうちに外部アクセスを戻す場合は、`budget_shutdown_dry_run = true`にする。
+   予算通知は1日に複数回届くため、そのまま戻すと次の通知で再び閉じる。
+3. planで、Cloud Run APIのingressを元の値へ戻すupdateとWorkflowsのupdateだけであることを確認してapplyする。
+4. 翌月に費用が予算額を下回ったら、`budget_shutdown_dry_run = false`へ戻してapplyする。
+
+閉じている間に別の目的でapplyすると、そのapplyでingressも元に戻る。閉じている間はplanのingressの差分を必ず確認する。
+backend CDのイメージ更新はingressを変更しない。
+
 ## 本番専用VPCとCloud SQL・Redisの運用
 
 Cloud Run API・batch Job・migrate Jobは本番専用custom-mode VPCの専用subnetからDirect VPC egressを使う。

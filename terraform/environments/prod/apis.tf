@@ -7,19 +7,22 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com", # batch Jobの定期実行(Cloud Scheduler)
     "compute.googleapis.com",        # 専用VPC / Direct VPC egress
+    "eventarc.googleapis.com",       # 予算通知のPub/SubからWorkflowsを起動
     "iap.googleapis.com",            # 調査VMへのIAP TCP forwarding
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # WIF トークン発行
     "logging.googleapis.com",
     "monitoring.googleapis.com",
-    "redis.googleapis.com", # Memorystore
-    "run.googleapis.com",   # Cloud Run / Jobs
+    "pubsub.googleapis.com", # 予算通知の受け口
+    "redis.googleapis.com",  # Memorystore
+    "run.googleapis.com",    # Cloud Run / Jobs
     "secretmanager.googleapis.com",
     "servicenetworking.googleapis.com", # Cloud SQL / MemorystoreのPrivate Service Access
     "serviceusage.googleapis.com",
-    "sqladmin.googleapis.com", # Cloud SQL
-    "sts.googleapis.com",      # WIF token exchange
-    "vision.googleapis.com",   # ロゴ検出
+    "sqladmin.googleapis.com",  # Cloud SQL
+    "sts.googleapis.com",       # WIF token exchange
+    "vision.googleapis.com",    # ロゴ検出
+    "workflows.googleapis.com", # 予算超過時にCloud Run APIのingressを閉じる
   ])
 }
 
