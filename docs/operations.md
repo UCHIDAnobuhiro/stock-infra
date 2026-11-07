@@ -610,8 +610,9 @@ gcloud compute networks delete default
 ```
 
 network削除後、auto subnet、route、既定Firewallルールが残っていないことを確認する。
-bootstrapの`auto_create_network`は構築済みprojectのForceNewを避けるため変更しない。
-projectを再作成しない限りdefault VPCは復元されない。
+bootstrapの`auto_create_network`は`false`で、新規project作成時はTerraformがdefault VPCを
+即時削除するため、この手順は不要になる。構築済みprojectでは値の変更がstateにしか反映されず、
+default VPCは上記の手動手順で削除する。projectを再作成しない限りdefault VPCは復元されない。
 
 #### 6. 最終確認
 
