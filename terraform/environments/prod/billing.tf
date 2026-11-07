@@ -2,8 +2,9 @@
 #
 # 予算は通知するだけで課金を止めない。また費用データの反映には数時間の遅れがある。
 #
-# 予算APIはユーザー認証で呼び出すとquota projectが必要になる。実行者のADCに
-# 本プロジェクトをquota projectとして設定する（docs/operations.md「予算とコスト通知」）。
+# 予算APIはユーザー認証で呼び出すとquota projectが必要になる。providerはADCの
+# quota_project_idを使わないため、実行時に環境変数USER_PROJECT_OVERRIDEと
+# GOOGLE_BILLING_PROJECTで本プロジェクトを指定する（docs/operations.md「予算とコスト通知」）。
 
 locals {
   # 実績額は段階的に、予測額は予算到達の見込みだけを通知する。
