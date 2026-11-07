@@ -4,6 +4,12 @@ locals {
     LOG_FORMAT = "json"
   }
 
+  # backendはINSTANCE_CONNECTION_NAMEがあるときCloud SQL Go Connectorで接続する。
+  # Cloud SQLはpublic IPを持たないため、Connectorにprivate IPを明示させる。
+  database_env = {
+    DB_IP_TYPE = "PRIVATE"
+  }
+
   database_secret_env = {
     DB_NAME                  = "DB_NAME"
     DB_PASSWORD              = "DB_PASSWORD"
@@ -12,9 +18,9 @@ locals {
   }
 
   redis_secret_env = {
-    REDIS_HOST     = "REDIS_DEDICATED_HOST"
-    REDIS_PASSWORD = "REDIS_DEDICATED_PASSWORD"
-    REDIS_PORT     = "REDIS_DEDICATED_PORT"
+    REDIS_HOST     = "REDIS_HOST"
+    REDIS_PASSWORD = "REDIS_PASSWORD"
+    REDIS_PORT     = "REDIS_PORT"
   }
 
   oauth_env = var.enable_oauth ? {
@@ -32,6 +38,7 @@ locals {
 
   api_env = merge(
     local.common_env,
+    local.database_env,
     local.oauth_env,
     {
       CANDLES_CACHE_TTL         = "24h"
@@ -59,7 +66,7 @@ locals {
     local.oauth_secret_env,
   )
 
-  batch_env = merge(local.common_env, {
+  batch_env = merge(local.common_env, local.database_env, {
     CANDLES_CACHE_TTL            = "24h"
     DB_MAX_IDLE_CONNS            = tostring(local.database_pool.batch.max_idle)
     DB_MAX_OPEN_CONNS            = tostring(local.database_pool.batch.max_open)
@@ -78,7 +85,7 @@ locals {
     },
   )
 
-  migrate_env = merge(local.common_env, {
+  migrate_env = merge(local.common_env, local.database_env, {
     DB_MAX_IDLE_CONNS = tostring(local.database_pool.migrate.max_idle)
     DB_MAX_OPEN_CONNS = tostring(local.database_pool.migrate.max_open)
   })
@@ -140,11 +147,6 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
-
       dynamic "env" {
         for_each = local.api_env
         content {
@@ -164,13 +166,6 @@ resource "google_cloud_run_v2_service" "api" {
             }
           }
         }
-      }
-    }
-
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [google_sql_database_instance.main.connection_name]
       }
     }
 
@@ -201,6 +196,7 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_sql_egress,
     google_compute_firewall.cloud_run_allow_redis_egress,
     google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.api_accessor,
@@ -256,11 +252,6 @@ resource "google_cloud_run_v2_job" "batch_single" {
           }
         }
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         dynamic "env" {
           for_each = local.batch_env
           content {
@@ -283,14 +274,7 @@ resource "google_cloud_run_v2_job" "batch_single" {
         }
       }
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
-        }
-      }
-
-      # candles実行時にMemorystoreへ到達するため、単一Jobには常にDirect VPC egressを設定する。
+      # private IPのCloud SQLとMemorystoreへ到達するため、単一Jobには常にDirect VPC egressを設定する。
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
         network_interfaces {
@@ -312,6 +296,7 @@ resource "google_cloud_run_v2_job" "batch_single" {
   depends_on = [
     google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_sql_egress,
     google_compute_firewall.cloud_run_allow_redis_egress,
     google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.jobs_accessor,
@@ -370,11 +355,6 @@ resource "google_cloud_run_v2_job" "migrate" {
           }
         }
 
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-
         dynamic "env" {
           for_each = local.migrate_env
           content {
@@ -397,10 +377,13 @@ resource "google_cloud_run_v2_job" "migrate" {
         }
       }
 
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
+      # private IPのCloud SQLへ到達するため、migrate JobにもDirect VPC egressを設定する。
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = google_compute_network.prod.name
+          subnetwork = google_compute_subnetwork.cloud_run.name
+          tags       = local.cloud_run_network_tags
         }
       }
     }
@@ -414,7 +397,10 @@ resource "google_cloud_run_v2_job" "migrate" {
   }
 
   depends_on = [
+    google_project_service.services["compute.googleapis.com"],
     google_project_service.services["run.googleapis.com"],
+    google_compute_firewall.cloud_run_allow_sql_egress,
+    google_compute_firewall.cloud_run_deny_other_egress,
     google_secret_manager_secret_iam_member.migrate_accessor,
     google_secret_manager_secret_version.managed,
   ]

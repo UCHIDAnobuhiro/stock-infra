@@ -22,6 +22,14 @@ locals {
     for index, octet in split(".", cidrhost(var.memorystore_inspector_subnet_cidr, -1)) :
     tonumber(octet) * local.ipv4_octet_weights[index]
   ])
+  private_service_access_start = sum([
+    for index, octet in split(".", cidrhost(var.private_service_access_cidr, 0)) :
+    tonumber(octet) * local.ipv4_octet_weights[index]
+  ])
+  private_service_access_end = sum([
+    for index, octet in split(".", cidrhost(var.private_service_access_cidr, -1)) :
+    tonumber(octet) * local.ipv4_octet_weights[index]
+  ])
 }
 
 # Cloud Runの/26を消費せず、調査VMのライフサイクルを分離するための最小/29 subnet。

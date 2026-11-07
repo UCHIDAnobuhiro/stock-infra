@@ -66,9 +66,9 @@ locals {
   ]
 
   redis_secret_names = [
-    "REDIS_DEDICATED_HOST",
-    "REDIS_DEDICATED_PASSWORD",
-    "REDIS_DEDICATED_PORT",
+    "REDIS_HOST",
+    "REDIS_PASSWORD",
+    "REDIS_PORT",
   ]
 
   api_secret_names = concat(
