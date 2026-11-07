@@ -37,6 +37,8 @@
 - 単一のCloud Run batch Jobとmigrate Job
 - batch Jobを定期実行するCloud Scheduler
 - Cloud MonitoringのUptime Checkとalert policy
+- 本プロジェクトの月次予算と、予算超過のメール通知
+- 予算超過時にCloud Run APIのingressを閉じるPub/Sub・Eventarc・Workflows
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
@@ -170,6 +172,32 @@ Job失敗とScheduler失敗は単発でも対応が必要なため即時検知�
 Slack通知チャネルはCloud MonitoringとSlackのOAuth連携を必要とする。OAuth tokenを
 `terraform.tfvars`やTerraform stateへ保存しないため、チャネルはGCP Consoleで人間が作成する。
 Terraformは`slack_notification_channel_id`に設定したresource nameだけをalert policyから参照する。
+
+### 予算とコスト通知
+
+`enable_billing_budget = true`のとき、本プロジェクトだけを対象とする月次予算（既定20,000円）を作成し、
+実績額の50%・90%・100%と予測額の100%でBilling Account管理者・ユーザーへメール通知する。
+
+- 予算の通知先はMonitoringのメールチャネルに限られ、Slackへ直接送れない。Slack連携には
+  Pub/Subと通知処理の追加が必要になるため、構成を簡潔に保つ目的で既定のメール通知だけを使う
+- 予算は課金を止めない。費用データの反映には数時間の遅れがあるため、通知時点で予算額を超えていることがある
+
+`enable_budget_shutdown = true`のとき、予算の実績額が予算額に達したらCloud Run APIのingressを
+`INGRESS_TRAFFIC_INTERNAL_ONLY`にして外部アクセスを閉じる。
+
+```mermaid
+flowchart LR
+    B[Cloud Billing budget] -->|1日に複数回| T[Pub/Sub topic]
+    T --> E[Eventarc trigger]
+    E --> W[Workflows budget-shutdown]
+    W -->|costAmount >= budgetAmount| R[Cloud Run API ingress を INTERNAL_ONLY]
+```
+
+- 課金そのものを止めるとCloud SQL・Redis・Artifact Registryのデータを失うおそれがあるため、ingressだけを閉じる
+- 止まるのはリクエスト処理、Vertex AI呼び出し、通信量などアクセスに比例する費用で、固定費とbatch Jobは止まらない
+- すでに閉じていれば何もしないため、予算通知の重複配信に対する仕組みは持たない
+- 閉じたことは独自ドメインのUptime Checkのアラートで通知される
+- ingressはTerraform管理のため、閉じた後のplanにはingressを戻すupdateが出る。`ignore_changes`には加えない
 
 ## ネットワーク
 
