@@ -450,11 +450,17 @@ GCP Consoleのテスト通知が届くことを再確認する。OAuth tokenを�
 ### 前提
 
 - planとapplyを実行する人間に、Billing Accountの`roles/billing.costsManager`以上の権限が必要
-- 予算APIはユーザー認証で呼び出すとquota projectを要求するため、ADCへ本プロジェクトを設定する
+- 予算APIはユーザー認証で呼び出すとquota projectを要求する。Google providerはADCの
+  `quota_project_id`をリクエストへ付与しないため、`gcloud auth application-default set-quota-project`
+  だけでは`SERVICE_DISABLED`（consumerがgcloudのOAuthクライアントのプロジェクト）で失敗する。
+  予算に関するplanとapplyは、次の環境変数で本プロジェクトをquota projectに指定して実行する
 
 ```bash
-gcloud auth application-default set-quota-project <project-id>
+export USER_PROJECT_OVERRIDE=true
+export GOOGLE_BILLING_PROJECT=<project-id>
 ```
+
+指定したプロジェクトに対する`serviceusage.services.use`権限（Ownerや`roles/serviceusage.serviceUsageConsumer`）が必要になる。
 
 ### 予算を有効にする
 
