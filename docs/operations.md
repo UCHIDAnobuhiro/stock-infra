@@ -289,6 +289,25 @@ restrict_api_to_load_balancer = true
 直接アクセスすると `404` 等で拒否されることを確認する。最後にTerraform planが
 `No changes` になることを確認する。
 
+切り替え前に、frontend、OAuthのリダイレクト先、外部監視、backend CDのスモークテスト等が
+Cloud RunのデフォルトURIを参照していないことを確認する。切り替え後はデフォルトURIへの
+インターネットからのリクエストがすべて拒否される。
+
+ingressはService単位の設定のためapply直後に反映されるが、`TRUSTED_PROXY_HOPS`は
+テンプレートの環境変数のため、Terraformが作成する新Revisionへtrafficが向くまで反映されない。
+Serviceのtrafficは`ignore_changes`でbackend CDの管理としているため、trafficが特定の
+Revisionに固定されていると、LB限定後も旧Revisionが`TRUSTED_PROXY_HOPS=1`のまま応答する。
+この状態では全リクエストのクライアントIPがLBのIPと判定され、IP単位のレート制限が
+全ユーザーで共有される。apply後に次を確認し、`TRUSTED_PROXY_HOPS=2`のRevisionへ
+trafficが100%向いていなければ、backend CDのtraffic切り替え手順を使う。
+
+```bash
+gcloud run services describe backend --region <region> \
+  --format='yaml(status.traffic,status.latestReadyRevisionName)'
+gcloud run revisions describe <revision-name> --region <region> \
+  --format='yaml(spec.containers[0].env)'
+```
+
 `TRUSTED_PROXY_HOPS`はLB限定時に`2`、直接公開中（独自ドメインの移行期間を含む）は`1`とする。
 [外部Application Load Balancerの仕様](https://cloud.google.com/load-balancing/docs/https#x-forwarded-for_header)では
 X-Forwarded-For末尾に`client-ip,load-balancer-ip`が追加されるため、LB限定時は右から2番目を選ぶ。
