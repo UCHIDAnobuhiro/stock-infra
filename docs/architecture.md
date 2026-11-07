@@ -37,6 +37,7 @@
 - 単一のCloud Run batch Jobとmigrate Job
 - batch Jobを定期実行するCloud Scheduler
 - Cloud MonitoringのUptime Checkとalert policy
+- 本プロジェクトの月次予算と、予算超過をSlackへ通知するPub/Sub・Workflows・Eventarc
 - Cloud Runの環境変数、Secret参照、ネットワーク、リソース制限
 
 ## リクエストとデプロイの流れ
@@ -170,6 +171,26 @@ Job失敗とScheduler失敗は単発でも対応が必要なため即時検知�
 Slack通知チャネルはCloud MonitoringとSlackのOAuth連携を必要とする。OAuth tokenを
 `terraform.tfvars`やTerraform stateへ保存しないため、チャネルはGCP Consoleで人間が作成する。
 Terraformは`slack_notification_channel_id`に設定したresource nameだけをalert policyから参照する。
+
+### 予算とコスト通知
+
+`enable_billing_budget = true`のとき、本プロジェクトだけを対象とする月次予算（既定20,000円）を作成し、
+実績額の50%・90%・100%と予測額の100%で通知する。
+
+```mermaid
+flowchart LR
+    B[Cloud Billing budget] -->|1日に複数回| T[Pub/Sub topic]
+    T --> E[Eventarc trigger]
+    E --> W[Workflows budget-notifier]
+    W -->|ifGenerationMatch=0| G[(GCS 通知済み印)]
+    W -->|初回のみ sys.log| L[Cloud Logging]
+    L --> A[ログアラート] --> S[Slack]
+```
+
+- 予算は通知先にMonitoringのメールチャネルしか指定できないため、ログアラートを経由して既存のSlackチャネルへ通知する。Slackのtokenはstateへ保存しない
+- 予算通知はしきい値を超えていなくても定期的に届き、Pub/Subは重複配信もある。Workflowsは「対象月・判定基準・しきい値」ごとのGCSオブジェクトを`ifGenerationMatch=0`で作成し、作成できたときだけログを出す
+- Billing Account管理者への既定のメール通知も残し、Slack経路が壊れた場合の保険にする
+- 予算は課金を止めない。費用データの反映には数時間の遅れがあるため、通知時点で予算額を超えていることがある
 
 ## ネットワーク
 

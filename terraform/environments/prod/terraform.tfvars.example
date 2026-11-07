@@ -51,3 +51,10 @@ enable_cloud_run = false
 # Cloud MonitoringでSlackをOAuth連携した後、チャネルのresource nameを指定する。
 # OAuth tokenはterraform.tfvarsやTerraform stateへ保存しない。
 slack_notification_channel_id = "projects/replace-with-project-id/notificationChannels/1234567890123456789"
+
+# 月次予算とSlackへの予算超過通知。実行者にBilling AccountのCosts Manager以上の権限と、
+# ADCのquota project設定が必要（docs/operations.md「予算とコスト通知」）。
+enable_billing_budget = false
+billing_account_id    = "000000-000000-000000"
+monthly_budget_amount = 20000
+budget_currency_code  = "JPY"

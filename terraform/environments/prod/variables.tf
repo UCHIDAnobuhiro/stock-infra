@@ -371,3 +371,38 @@ variable "slack_notification_channel_id" {
     error_message = "slack_notification_channel_id は空文字か、projects/<project-id>/notificationChannels/<channel-id> 形式にしてください。"
   }
 }
+
+variable "enable_billing_budget" {
+  description = "月次予算とSlackへの予算超過通知を作成するか。実行者にBilling AccountのCosts Manager以上の権限が必要"
+  type        = bool
+  default     = false
+}
+
+variable "billing_account_id" {
+  description = "予算を作成するBilling Account ID。公開リポジトリには実値を保存しない"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "monthly_budget_amount" {
+  description = "本プロジェクトの月次予算額（budget_currency_codeの通貨単位、整数）"
+  type        = number
+  default     = 20000
+
+  validation {
+    condition     = var.monthly_budget_amount > 0 && floor(var.monthly_budget_amount) == var.monthly_budget_amount
+    error_message = "monthly_budget_amount は1以上の整数にしてください。"
+  }
+}
+
+variable "budget_currency_code" {
+  description = "予算の通貨。Billing Accountの通貨と一致させる"
+  type        = string
+  default     = "JPY"
+
+  validation {
+    condition     = can(regex("^[A-Z]{3}$", var.budget_currency_code))
+    error_message = "budget_currency_code は ISO 4217 の3文字コードにしてください。"
+  }
+}

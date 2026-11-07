@@ -1,0 +1,80 @@
+# Cloud Billingの予算通知（Pub/Sub）を受け取り、新しくしきい値を超えたときだけ
+# 構造化ログを1件出力する。ログはCloud Monitoringのログアラートで既存のSlackチャネルへ通知する。
+#
+# 予算通知はしきい値を超えていなくても1日に複数回届き、Pub/Subは同じメッセージを
+# 重複配信することがある。通知の重複を防ぐため、「対象月・判定基準・しきい値」ごとに
+# GCSオブジェクトをifGenerationMatch=0で作成し、作成できたときだけログを出す。
+main:
+  params: [event]
+  steps:
+    - decode:
+        assign:
+          - message: ${event.data.message}
+          - budget: ${json.decode(text.decode(base64.decode(message.data)))}
+          - attributes: ${default(map.get(message, "attributes"), {})}
+    - notify_actual:
+        call: notify_once
+        args:
+          budget: ${budget}
+          attributes: ${attributes}
+          threshold_key: alertThresholdExceeded
+          spend_basis: actual
+    - notify_forecast:
+        call: notify_once
+        args:
+          budget: ${budget}
+          attributes: ${attributes}
+          threshold_key: forecastThresholdExceeded
+          spend_basis: forecast
+    - done:
+        return: ok
+
+notify_once:
+  params: [budget, attributes, threshold_key, spend_basis]
+  steps:
+    - check_threshold:
+        switch:
+          # しきい値を超えていない場合、該当キーはメッセージに含まれない。
+          - condition: ${not(threshold_key in budget)}
+            return: not_exceeded
+    - build_marker:
+        assign:
+          - threshold: ${budget[threshold_key]}
+          - threshold_percent: ${int(threshold * 100)}
+          - marker: ${budget.costIntervalStart + "/" + spend_basis + "/" + string(threshold_percent)}
+    - create_marker:
+        try:
+          call: googleapis.storage.v1.objects.insert
+          args:
+            bucket: ${sys.get_env("STATE_BUCKET")}
+            name: ${marker}
+            ifGenerationMatch: 0
+            uploadType: media
+            body:
+              notified: true
+        except:
+          as: e
+          steps:
+            - already_notified:
+                switch:
+                  # 412は同じ月・判定基準・しきい値を通知済みであることを示す。
+                  - condition: ${"code" in e and e.code == 412}
+                    return: already_notified
+            - unexpected_error:
+                raise: ${e}
+    - log_exceeded:
+        call: sys.log
+        args:
+          severity: NOTICE
+          json:
+            event: budget_threshold_exceeded
+            spend_basis: ${spend_basis}
+            threshold_percent: ${threshold_percent}
+            cost_amount: ${budget.costAmount}
+            budget_amount: ${budget.budgetAmount}
+            currency_code: ${budget.currencyCode}
+            cost_interval_start: ${budget.costIntervalStart}
+            budget_display_name: ${budget.budgetDisplayName}
+            budget_id: ${default(map.get(attributes, "budgetId"), "")}
+    - notified:
+        return: notified
