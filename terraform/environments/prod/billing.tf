@@ -49,7 +49,15 @@ resource "google_billing_budget" "monthly" {
   }
 
   # all_updates_ruleを指定しない場合、Billing Account管理者・ユーザーへ既定のメール通知が届く。
-  # 通知先を追加するとき（Pub/Sub、Monitoringのメールチャネル）だけall_updates_ruleを使う。
+  # 予算超過で外部アクセスを閉じる場合だけ、通知をPub/Subへも発行する（budget-shutdown.tf）。
+  # disable_default_iam_recipientsの既定値はfalseのため、メール通知は残る。
+  dynamic "all_updates_rule" {
+    for_each = local.budget_shutdown_enabled ? [google_pubsub_topic.budget_alerts[0].id] : []
+    content {
+      pubsub_topic   = all_updates_rule.value
+      schema_version = "1.0"
+    }
+  }
 
   lifecycle {
     precondition {
@@ -58,5 +66,8 @@ resource "google_billing_budget" "monthly" {
     }
   }
 
-  depends_on = [google_project_service.services["billingbudgets.googleapis.com"]]
+  depends_on = [
+    google_project_service.services["billingbudgets.googleapis.com"],
+    google_pubsub_topic_iam_member.budget_alerts_billing_publisher,
+  ]
 }

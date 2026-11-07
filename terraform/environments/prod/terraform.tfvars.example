@@ -58,3 +58,8 @@ enable_billing_budget = false
 billing_account_id    = "000000-000000-000000"
 monthly_budget_amount = 20000
 budget_currency_code  = "JPY"
+
+# 予算の実績額が予算額に達したらCloud Run APIのingressを閉じる。固定費は止まらない。
+# 疎通確認（docs/operations.md「予算超過で外部アクセスを閉じる」）までdry runのままにする。
+enable_budget_shutdown  = false
+budget_shutdown_dry_run = true

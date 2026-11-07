@@ -406,3 +406,20 @@ variable "budget_currency_code" {
     error_message = "budget_currency_code は ISO 4217 の3文字コードにしてください。"
   }
 }
+
+variable "enable_budget_shutdown" {
+  description = "予算の実績額が予算額に達したらCloud Run APIのingressを閉じるか。固定費は止まらない"
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_budget_shutdown || (var.enable_billing_budget && var.enable_cloud_run)
+    error_message = "enable_budget_shutdown を有効にする場合は enable_billing_budget と enable_cloud_run を有効にしてください。"
+  }
+}
+
+variable "budget_shutdown_dry_run" {
+  description = "trueの間は予算超過時もingressを変更せず、Workflowsの実行結果にdry_run_would_closeを返すだけにする"
+  type        = bool
+  default     = true
+}

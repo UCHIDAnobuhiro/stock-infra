@@ -59,8 +59,11 @@ run "billing_budget_notifies_by_email" {
   }
 
   assert {
-    condition     = length(google_billing_budget.monthly[0].all_updates_rule) == 0
-    error_message = "既定のメール通知だけを使い、追加の通知先を設定しないでください。"
+    condition = (
+      length(google_billing_budget.monthly[0].all_updates_rule) == 0 &&
+      length(google_workflows_workflow.budget_shutdown) == 0
+    )
+    error_message = "enable_budget_shutdown を指定しない場合は既定のメール通知だけを使ってください。"
   }
 }
 
@@ -72,4 +75,61 @@ run "billing_budget_requires_billing_account" {
   }
 
   expect_failures = [google_billing_budget.monthly]
+}
+
+run "budget_shutdown_closes_only_api_ingress" {
+  command = plan
+
+  variables {
+    enable_billing_budget  = true
+    billing_account_id     = "000000-000000-000000"
+    enable_budget_shutdown = true
+  }
+
+  assert {
+    condition = (
+      google_billing_budget.monthly[0].all_updates_rule[0].schema_version == "1.0" &&
+      google_billing_budget.monthly[0].all_updates_rule[0].disable_default_iam_recipients != true
+    )
+    error_message = "予算通知をPub/Subへ発行し、メール通知も残してください。"
+  }
+
+  assert {
+    condition     = google_workflows_workflow.budget_shutdown[0].user_env_vars.DRY_RUN == "true"
+    error_message = "疎通確認前に外部アクセスを閉じないよう、既定ではdry runにしてください。"
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_service_iam_member.budget_shutdown_developer[0].name == "backend" &&
+      google_pubsub_topic_iam_member.budget_alerts_billing_publisher[0].member == "serviceAccount:billing-budget-alert@system.gserviceaccount.com"
+    )
+    error_message = "更新権限はCloud Run API Serviceだけに付与し、予算通知の発行権限はCloud Billingに付与してください。"
+  }
+}
+
+run "budget_shutdown_can_be_armed" {
+  command = plan
+
+  variables {
+    enable_billing_budget   = true
+    billing_account_id      = "000000-000000-000000"
+    enable_budget_shutdown  = true
+    budget_shutdown_dry_run = false
+  }
+
+  assert {
+    condition     = google_workflows_workflow.budget_shutdown[0].user_env_vars.DRY_RUN == "false"
+    error_message = "budget_shutdown_dry_run = false で実際に閉じる設定にしてください。"
+  }
+}
+
+run "budget_shutdown_requires_budget" {
+  command = plan
+
+  variables {
+    enable_budget_shutdown = true
+  }
+
+  expect_failures = [var.enable_budget_shutdown]
 }
