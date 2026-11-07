@@ -6,9 +6,8 @@ resource "google_project" "main" {
   org_id          = var.organization_id
   folder_id       = var.folder_id
 
-  # project作成時にだけ評価される属性であり、構築済みprojectのForceNewを避けるため変更しない。
-  # default VPCは本番リソースから切り離して廃止し、projectを再作成しない限り復元されない。
-  auto_create_network = true
+  # 本番は専用VPCを使うため、default VPCは作らない。
+  auto_create_network = false
   deletion_policy     = "PREVENT"
 
   lifecycle {
