@@ -83,7 +83,7 @@ output "redis_host" {
   value       = google_redis_instance.prod.host
 }
 
-output "dedicated_network_name" {
+output "network_name" {
   description = "本番専用VPC名"
   value       = google_compute_network.prod.name
 }
@@ -103,7 +103,12 @@ output "memorystore_inspector_vm_zone" {
   value       = google_compute_instance.memorystore_inspector.zone
 }
 
+output "db_password_secret_version" {
+  description = "Cloud SQL Studioでの確認時に取得するDB_PASSWORDの数値version"
+  value       = local.all_secret_versions["DB_PASSWORD"]
+}
+
 output "redis_auth_secret_version" {
-  description = "調査時に取得するREDIS_DEDICATED_PASSWORDの数値version"
-  value       = local.all_secret_versions["REDIS_DEDICATED_PASSWORD"]
+  description = "調査時に取得するREDIS_PASSWORDの数値version"
+  value       = local.all_secret_versions["REDIS_PASSWORD"]
 }

@@ -14,6 +14,7 @@ locals {
     "redis.googleapis.com", # Memorystore
     "run.googleapis.com",   # Cloud Run / Jobs
     "secretmanager.googleapis.com",
+    "servicenetworking.googleapis.com", # Cloud SQL / MemorystoreのPrivate Service Access
     "serviceusage.googleapis.com",
     "sqladmin.googleapis.com", # Cloud SQL
     "sts.googleapis.com",      # WIF token exchange

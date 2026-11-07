@@ -30,8 +30,9 @@ locals {
 }
 
 # Cloud SQL PostgreSQL 最小構成（コスト優先: 共有コア・zonal・HDD）。
-# Cloud Run からは公開IP + 組み込み Cloud SQL 接続（Unix ソケット）でアクセスし、
-# 承認ネットワークは追加しない。
+# public IPを持たせず、Private Service Access経由のprivate IPだけで公開する。
+# Cloud Runからはbackend内のCloud SQL Go Connector（private IP / 3307）で接続し、
+# mTLSとroles/cloudsql.clientによるIAM認可を経由させる。承認ネットワークは追加しない。
 resource "google_sql_database_instance" "main" {
   name             = "${var.resource_prefix}-db"
   database_version = "POSTGRES_17"
@@ -51,8 +52,12 @@ resource "google_sql_database_instance" "main" {
     # gcloud / コンソールからの削除も防ぐ（GCP 側フラグ）
     deletion_protection_enabled = true
 
+    # private_networkは一度設定すると外せない。ENCRYPTED_ONLYでConnector以外の
+    # クライアント（Cloud SQL Studio等）にも平文接続を許可しない。
     ip_configuration {
-      ipv4_enabled = true
+      ipv4_enabled    = false
+      private_network = google_compute_network.prod.id
+      ssl_mode        = "ENCRYPTED_ONLY"
     }
 
     backup_configuration {
@@ -75,7 +80,10 @@ resource "google_sql_database_instance" "main" {
     }
   }
 
-  depends_on = [google_project_service.services["sqladmin.googleapis.com"]]
+  depends_on = [
+    google_project_service.services["sqladmin.googleapis.com"],
+    google_service_networking_connection.private_service_access,
+  ]
 }
 
 resource "google_sql_database" "app" {

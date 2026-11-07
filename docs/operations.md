@@ -134,6 +134,10 @@ WIF Provider、デプロイ用サービスアカウント、GCPプロジェク�
 Repository SecretsまたはVariablesへ設定する。Cloud SQL接続名やランタイムSAはbackend CDへ渡さない。
 実値をREADMEやissueへ貼り付けない。
 
+Cloud SQLはprivate IPだけで公開するため、初回イメージには`INSTANCE_CONNECTION_NAME`と
+`DB_IP_TYPE=PRIVATE`でCloud SQL Go Connectorを使うbackendのcommitを使用する。
+public IP前提の`/cloudsql` Unixソケットで接続するイメージではDBへ接続できない。
+
 backendのAPI・batch・migrate CDを `publish_only=true` で実行する。GitHub ActionsのSummaryに
 表示されたcommit SHA付きURIを `initial_api_image`、`initial_batch_image`、
 `initial_migrate_image` へ設定し、`enable_cloud_run = true` へ変更する。3つのURIは同じ40文字の
@@ -441,12 +445,32 @@ Slack通知チャネルがenabledであり、policyの`notification_channels`に
 設定されていることを確認する。private channelでは`@Google Cloud Monitoring`が参加していること、
 GCP Consoleのテスト通知が届くことを再確認する。OAuth tokenを取得してTerraformへ移さない。
 
-## 本番専用VPCとRedisの運用
+## 本番専用VPCとCloud SQL・Redisの運用
 
-Cloud Run API・batch JobとRedisは本番専用custom-mode VPCを定常構成とする。
-API / batchは専用subnetからDirect VPC egressを使い、`REDIS_DEDICATED_*`の数値versionを参照する。
-default VPCと旧`REDIS_*`は定常構成に含めない。エージェントはplanの提示までとし、
-各applyと実環境の削除は人間がplanと依存関係を確認した後に実行する。
+Cloud Run API・batch Job・migrate Jobは本番専用custom-mode VPCの専用subnetからDirect VPC egressを使う。
+Cloud SQLとRedisはPrivate Service Accessの予約レンジ（`private_service_access_cidr`）でVPCへ接続し、
+Cloud SQLはpublic IPを持たない。Redis接続情報は`REDIS_*`の数値versionを参照する。
+エージェントはplanの提示までとし、各applyと実環境の削除は人間がplanと依存関係を確認した後に実行する。
+
+`private_service_access_cidr`はCloud Run subnet・調査VM subnetと重複させない。Cloud SQLの
+`private_network`は一度設定すると外せず、予約レンジを使用中のインスタンスがある間はレンジや
+peeringを縮小・削除できない。レンジを変える場合は通常変更に混ぜず、独立した計画を作成する。
+
+### Cloud SQLの内容を確認する
+
+Cloud SQLはpublic IPを持たないため、ローカル端末から`psql`等で直接接続しない。GCP Consoleの
+Cloud SQL Studioから対象インスタンスとdatabaseを選び、組み込みユーザーで認証する。
+ユーザー名とパスワードはTerraformが固定している数値versionの`DB_USER`・`DB_PASSWORD`から取得し、
+shell history、ファイル、issueへ残さない。
+
+```bash
+DB_PASSWORD_VERSION="$(terraform -chdir=terraform/environments/prod output -raw db_password_secret_version)"
+gcloud secrets versions access "$DB_PASSWORD_VERSION" --secret=DB_PASSWORD
+```
+
+Cloud SQL Studioの利用者には対象projectでCloud SQL Studioを使うためのIAMロールを個別に付与し、
+この構成から広いIAMを追加しない。調査では`SELECT`等の読み取りクエリを基本とし、データ修正は
+migrationとして別途レビューする。
 
 ### Memorystoreの内容を調査する
 
@@ -476,7 +500,7 @@ gcloud compute ssh "$VM_NAME" --zone "$VM_ZONE" --tunnel-through-iap
 
 ```bash
 REDIS_AUTH_VERSION="$(terraform -chdir=terraform/environments/prod output -raw redis_auth_secret_version)"
-gcloud secrets versions access "$REDIS_AUTH_VERSION" --secret=REDIS_DEDICATED_PASSWORD
+gcloud secrets versions access "$REDIS_AUTH_VERSION" --secret=REDIS_PASSWORD
 ```
 
 VM上では最初に疎通とkeyspaceを確認し、全keyを一度に走査する`KEYS`ではなく`SCAN`を使う。
@@ -499,135 +523,6 @@ unset REDISCLI_AUTH
 
 調査後はSSH sessionとAUTH stringを破棄し、VMを残す必要性を見直す。停止・削除は本変更のapplyへ
 混ぜず、対象VMと専用subnet・Firewallだけに限定された別のplanを人間が確認して実施する。
-
-### 旧環境の廃止
-
-旧Redis、旧Secret、default VPCの廃止は即時rollbackを不能にする。rollback期間終了の承認を
-作業記録へ残し、backendデプロイ、batch / migrateの手動実行、Secretローテーションを止めてから、
-次の順序で進める。複数段階を1回のapplyへまとめない。
-
-#### 1. 稼働状態と依存関係を記録する
-
-Secret値は取得・表示せず、Revisionのtraffic、VPC、Secret名と数値versionだけを確認する。
-
-```bash
-terraform -chdir=terraform/environments/prod plan
-gcloud run services describe backend --region <region> \
-  --format='yaml(status.latestReadyRevisionName,status.traffic)'
-gcloud run revisions list --service backend --region <region>
-gcloud run jobs describe batch --region <region>
-gcloud redis instances list --region <region> \
-  --format='table(name,state,authorizedNetwork)'
-gcloud compute networks subnets list --network=default
-gcloud compute firewall-rules list --filter='network:default'
-gcloud compute networks peerings list --network=default
-gcloud compute addresses list --filter='subnetwork:default'
-```
-
-開始時のplanは`No changes`でなければならない。API health check、Redisを使う通常リクエスト、
-直近のcandles Executionが成功していることを確認する。Cloud Monitoringの
-`redis.googleapis.com/clients/connected`と`redis.googleapis.com/commands/calls`で、
-旧Redisへのアプリ接続・通信がないことを確認する。Memorystore内部の管理コマンドしかない場合は、
-コマンド名と確認時刻を作業記録へ残す。
-
-Cloud SQL、database、user、`DB_*` Secret、migrate Job、`random_password`、Artifact Registryに
-差分があれば中止する。稼働中Redis、本番専用VPC、Cloud Run、`REDIS_DEDICATED_*`の削除・更新・
-再作成、または`must be replaced` / `forces replacement`が1件でもあれば中止する。
-
-#### 2. default VPCを参照する旧Revisionを削除する
-
-traffic 0でdefault VPCと旧`REDIS_*`を参照するRevisionだけを対象にする。最新Revision、
-trafficがあるRevision、本番専用VPCを参照するRevisionは削除しない。対象を1件ずつdescribeし、
-人間が名前を確認してから削除する。
-
-```bash
-gcloud run revisions describe <old-revision> --region <region> \
-  --format='yaml(metadata.name,metadata.annotations,status.conditions)'
-gcloud run revisions delete <old-revision> --region <region>
-```
-
-削除後、traffic 100%の最新Revisionだけが本番専用VPC、subnet、network tag、
-`REDIS_DEDICATED_*`を参照することを再確認する。Cloud Runが確保したdefault subnet上の
-`SERVERLESS`内部アドレスが解放されるまで次へ進まない。
-
-#### 3. 旧Redisだけを削除する
-
-最初に`refresh-only` planで、`moved` blockによる専用VPC・subnet・Firewall・Redisと旧Secretの
-state address変更だけを記録する。Cloud Run JobのExecution件数等の読み取り専用属性が更新される
-場合は内容を記録する。実リソースの追加・更新・削除が表示される場合は中止する。
-
-```bash
-terraform -chdir=terraform/environments/prod plan \
-  -refresh-only \
-  -out=record-state-moves.tfplan
-terraform -chdir=terraform/environments/prod show record-state-moves.tfplan
-terraform -chdir=terraform/environments/prod apply record-state-moves.tfplan
-```
-
-state moveを記録した後、例外的に`-target`を使い、次のplanを旧Redis 1件のdestroyへ限定する。
-target指定による不完全planの警告は想定内だが、対象追加、更新、再作成が含まれる場合は中止する。
-保存した各planのapplyは人間が実行する。
-
-```bash
-terraform -chdir=terraform/environments/prod plan \
-  -target=google_redis_instance.main \
-  -out=retire-old-redis.tfplan
-terraform -chdir=terraform/environments/prod show retire-old-redis.tfplan
-terraform -chdir=terraform/environments/prod apply retire-old-redis.tfplan
-```
-
-削除後は旧Redisが存在しないこと、専用Redisが`READY`であること、default VPCのRedis peeringが
-解放されたことを確認する。旧Redis削除後は旧環境へ即時rollbackできない。障害時は専用Redis、
-専用VPC、現行Revisionの復旧を正とする。
-
-#### 4. 旧Secret version・本体・IAMを削除する
-
-targetなしのplanを作成する。destroyは旧`REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD`の
-version・Secret本体と、API / batchの旧Secret accessorだけに限定する。
-`google_secret_manager_secret.managed`に残るSecretは`prevent_destroy`を維持する。
-
-```bash
-terraform -chdir=terraform/environments/prod plan -out=retire-old-secrets.tfplan
-terraform -chdir=terraform/environments/prod show retire-old-secrets.tfplan
-terraform -chdir=terraform/environments/prod apply retire-old-secrets.tfplan
-```
-
-Secret本体の削除は全versionを削除する。旧Secretが存在しないことと、API / batchランタイムSAが
-`REDIS_DEDICATED_*`だけへaccessorを持つことを確認する。Secret値は表示しない。
-
-#### 5. default VPCを削除する
-
-Cloud Run旧Revision、旧Redis、Redis peering、`SERVERLESS`内部アドレス、VM、router、VPN、
-forwarding rule等の依存が0であることを再確認する。依存が1件でも残る場合は削除せず、所有者と
-用途を確認する。既定Firewallルールを名前で1件ずつ削除した後、default VPCを削除する。
-
-```bash
-gcloud compute firewall-rules delete default-allow-icmp
-gcloud compute firewall-rules delete default-allow-internal
-gcloud compute firewall-rules delete default-allow-rdp
-gcloud compute firewall-rules delete default-allow-ssh
-gcloud compute networks delete default
-```
-
-network削除後、auto subnet、route、既定Firewallルールが残っていないことを確認する。
-bootstrapの`auto_create_network`は`false`で、新規project作成時はTerraformがdefault VPCを
-即時削除するため、この手順は不要になる。構築済みprojectでは値の変更がstateにしか反映されず、
-default VPCは上記の手動手順で削除する。projectを再作成しない限りdefault VPCは復元されない。
-
-#### 6. 最終確認
-
-API health check、Redisを使う通常リクエスト、candles Jobを実行し、Redis接続エラー、API 5xx、
-p95 latency、Cloud Run instance起動失敗、Redis memory / connection数を確認する。
-
-```bash
-curl -fsS https://<api-domain>/healthz
-gcloud run jobs execute batch --region <region> --args=candles --wait
-gcloud run services logs read backend --region <region> --limit 100
-terraform -chdir=terraform/environments/prod plan
-```
-
-最終planが`No changes`であり、Cloud SQL・DB関連、専用Redis、専用VPC、Cloud Runに意図しない差分が
-ないことを確認して完了とする。planファイルには実値が含まれ得るためコミットせず、安全に削除する。
 
 ## Secret versionの固定とローテーション
 

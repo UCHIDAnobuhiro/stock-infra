@@ -26,16 +26,11 @@ locals {
     DB_USER                  = var.db_user
     DB_NAME                  = var.db_name
     INSTANCE_CONNECTION_NAME = google_sql_database_instance.main.connection_name
-    REDIS_DEDICATED_HOST     = google_redis_instance.prod.host
-    REDIS_DEDICATED_PORT     = tostring(google_redis_instance.prod.port)
-    REDIS_DEDICATED_PASSWORD = google_redis_instance.prod.auth_string
+    REDIS_HOST               = google_redis_instance.prod.host
+    REDIS_PORT               = tostring(google_redis_instance.prod.port)
+    REDIS_PASSWORD           = google_redis_instance.prod.auth_string
     TWELVE_DATA_BASE_URL     = var.twelve_data_base_url
   }
-
-  # 旧REDIS_*だけを保護対象から分離して削除するための空map。
-  # moved blockで旧addressをこの削除専用resourceへ移し、他のmanaged Secretの
-  # prevent_destroyを維持したまま旧3件だけをdestroy planへ含める。
-  retired_redis_managed_secrets = tomap({})
 }
 
 resource "google_secret_manager_secret" "managed" {
@@ -65,27 +60,6 @@ resource "google_secret_manager_secret_version" "managed" {
   lifecycle {
     create_before_destroy = true
   }
-}
-
-# 旧REDIS_*の削除専用resource。for_eachは意図的に空であり、新規Secretを作成しない。
-resource "google_secret_manager_secret" "retired_redis" {
-  for_each = local.retired_redis_managed_secrets
-
-  secret_id = each.key
-
-  replication {
-    auto {}
-  }
-
-  depends_on = [google_project_service.services["secretmanager.googleapis.com"]]
-}
-
-resource "google_secret_manager_secret_version" "retired_redis" {
-  for_each = local.retired_redis_managed_secrets
-
-  secret          = google_secret_manager_secret.retired_redis[each.key].id
-  secret_data     = each.value
-  deletion_policy = "ABANDON"
 }
 
 locals {

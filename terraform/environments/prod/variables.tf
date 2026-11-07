@@ -46,6 +46,23 @@ variable "memorystore_inspector_subnet_cidr" {
   }
 }
 
+variable "private_service_access_cidr" {
+  description = "Cloud SQL・MemorystoreのPrivate Service Accessに予約する、他subnetと重複しない10.0.0.0/8内の/16〜/24 IPv4 CIDR"
+  type        = string
+  default     = "10.20.0.0/20"
+
+  validation {
+    condition = try(
+      cidrhost(var.private_service_access_cidr, 0) == split("/", var.private_service_access_cidr)[0] &&
+      tonumber(split("/", var.private_service_access_cidr)[1]) >= 16 &&
+      tonumber(split("/", var.private_service_access_cidr)[1]) <= 24 &&
+      can(regex("^10\\.", cidrhost(var.private_service_access_cidr, 0))),
+      false,
+    )
+    error_message = "private_service_access_cidr は10.0.0.0/8内の正規化した/16〜/24 CIDRにしてください。"
+  }
+}
+
 variable "memorystore_inspector_zone" {
   description = "Memorystore調査VMを配置するregion内のzone。空の場合は<region>-aを使用する"
   type        = string
@@ -149,9 +166,9 @@ variable "managed_secret_version_overrides" {
         "DB_USER",
         "DB_NAME",
         "INSTANCE_CONNECTION_NAME",
-        "REDIS_DEDICATED_HOST",
-        "REDIS_DEDICATED_PORT",
-        "REDIS_DEDICATED_PASSWORD",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
         "TWELVE_DATA_BASE_URL",
       ], name) && can(regex("^[1-9][0-9]*$", version))
     ])
