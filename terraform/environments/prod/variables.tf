@@ -373,7 +373,7 @@ variable "slack_notification_channel_id" {
 }
 
 variable "enable_billing_budget" {
-  description = "月次予算とSlackへの予算超過通知を作成するか。実行者にBilling AccountのCosts Manager以上の権限が必要"
+  description = "月次予算とメールでの予算超過通知を作成するか。実行者にBilling AccountのCosts Manager以上の権限が必要"
   type        = bool
   default     = false
 }

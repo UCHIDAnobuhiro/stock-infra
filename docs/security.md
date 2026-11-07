@@ -50,9 +50,6 @@ Terraformが管理する`google_secret_manager_secret_version`のversionを参�
 - Cloud SchedulerのJob起動SAには対象Job単位で最小限のCloud Run固有ロール（`roles/run.jobsExecutor`系）のみ付与し、
   上書き実行が必要なJobにのみ `run.jobs.runWithOverrides` を含むロールを与える。`roles/run.developer` のような
   Job定義自体を変更できるロールは与えない
-- 予算通知のWorkflows SAには、通知済み印バケットへの`roles/storage.objectCreator`（作成のみ）とログ書き込みだけを付与する。
-  Eventarcトリガー専用SAには`roles/workflows.invoker`だけを付与する。Workflowsにはworkflow単位のIAMがないため、この2つはプロジェクト単位になる
-- 予算のPub/Sub topicへの発行権限は、Cloud Billingのシステムアカウント`billing-budget-alert@system.gserviceaccount.com`にtopic単位で付与する
 
 ## ネットワーク境界
 

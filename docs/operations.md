@@ -456,8 +456,6 @@ GCP Consoleのテスト通知が届くことを再確認する。OAuth tokenを�
 gcloud auth application-default set-quota-project <project-id>
 ```
 
-- 「8. 監視とSlack通知」のSlack通知チャネルを設定済みであること
-
 ### 予算を有効にする
 
 ローカルの`terraform.tfvars`へ次を設定する。Billing Account IDは`.tf`やドキュメントへ書かない。
@@ -470,38 +468,14 @@ monthly_budget_amount = 20000
 budget_currency_code  = "JPY"
 ```
 
-remote stateとローカル設定でplanし、次の追加だけであることを確認する。
+remote stateとローカル設定でplanし、`billingbudgets.googleapis.com`の有効化と
+`google_billing_budget.monthly[0]`の作成だけであることを確認する。既存リソースの更新・削除・再作成があれば中止する。
+`enable_billing_budget = false`のままでもAPI 1件の追加は出る。
 
-| 区分 | 件数 | 内容 |
-|---|---|---|
-| API | 5 | `billingbudgets`、`eventarc`、`pubsub`、`storage`、`workflows`。`storage`はbootstrapで有効化済みのためno-opで取り込まれる |
-| 予算と通知 | 13 | 予算、Pub/Sub topicと発行権限、通知済み印バケット、SA 2つとIAM 3つ、Workflows、Eventarcトリガー、alert policy 2つ |
+apply後、Billingコンソールの「予算とアラート」に予算が表示され、しきい値が実績50%・90%・100%、
+予測100%であることを確認する。通知メールはBilling Account管理者・ユーザーへ届く。
 
-既存リソースの更新・削除・再作成があれば中止する。`enable_billing_budget = false`のままでもAPI 5件の追加は出る。
-
-### 疎通を確認する
-
-apply後、本物の対象月と衝突しない`costIntervalStart`でテストメッセージを発行する。
-
-```bash
-gcloud pubsub topics publish <resource-prefix>-budget-alerts \
-  --attribute=budgetId=manual-test \
-  --message='{"budgetDisplayName":"manual test","costAmount":10000,"costIntervalStart":"manual-test-1","budgetAmount":20000,"budgetAmountType":"SPECIFIED_AMOUNT","alertThresholdExceeded":0.5,"currencyCode":"JPY"}'
-```
-
-1. Workflowsの`<resource-prefix>-budget-notifier`に成功したExecutionがあること
-2. Slackへ「Budget actual spend exceeded threshold」が届くこと
-3. 同じメッセージを再発行してもSlackへ再通知されないこと
-
-確認後、テスト用の通知済み印を削除する。
-
-```bash
-gcloud storage rm "gs://<project-id>-budget-alert-state/manual-test-1/**"
-```
-
-初回の本物の予算通知はapplyから数時間後に届く。
-
-### 予算超過の通知
+### 予算超過の通知を受けたら
 
 1. BillingのレポートをサービスとSKU別に表示し、増えた費目と開始日を特定する。
 2. Cloud Runのインスタンス数とリクエスト数、batch Jobの実行回数、Vertex AI・Vision APIの呼び出しを確認する。
@@ -509,14 +483,6 @@ gcloud storage rm "gs://<project-id>-budget-alert-state/manual-test-1/**"
 4. 予測額の通知は月末時点の見込みである。実績額の推移と合わせて判断する。
 
 予算は課金を止めない。費用データには数時間の遅れがあり、通知時点の金額は確定値ではない。
-
-### 予算通知が届かない場合
-
-1. Workflowsに予算通知のExecutionがあるか確認する。ない場合はEventarcトリガー、Pub/Sub topicの
-   `billing-budget-alert@system.gserviceaccount.com`の発行権限、予算の`all_updates_rule`を確認する。
-2. Executionが失敗している場合はエラーを確認する。GCSの403は通知済み印バケットのIAM、ログ書き込み失敗はWorkflows SAの`roles/logging.logWriter`を確認する。
-3. Executionが`already_notified`を返す場合は、その月・しきい値を通知済みである。
-4. ログは出ているのにSlackへ届かない場合は「通知されない場合」を確認する。Billing Account管理者へのメール通知は別経路で届く。
 
 ## 本番専用VPCとCloud SQL・Redisの運用
 

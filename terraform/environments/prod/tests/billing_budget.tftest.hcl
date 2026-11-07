@@ -28,22 +28,17 @@ run "billing_budget_is_disabled_by_default" {
   command = plan
 
   assert {
-    condition = (
-      length(google_billing_budget.monthly) == 0 &&
-      length(google_workflows_workflow.budget_notifier) == 0 &&
-      length(google_monitoring_alert_policy.budget_threshold) == 0
-    )
-    error_message = "enable_billing_budget を指定しない既存環境では予算関連リソースを作成しないでください。"
+    condition     = length(google_billing_budget.monthly) == 0
+    error_message = "enable_billing_budget を指定しない既存環境では予算を作成しないでください。"
   }
 }
 
-run "billing_budget_notifies_slack_through_logs" {
+run "billing_budget_notifies_by_email" {
   command = plan
 
   variables {
-    enable_billing_budget         = true
-    billing_account_id            = "000000-000000-000000"
-    slack_notification_channel_id = "projects/example-project-123/notificationChannels/1234567890123456789"
+    enable_billing_budget = true
+    billing_account_id    = "000000-000000-000000"
   }
 
   assert {
@@ -64,24 +59,8 @@ run "billing_budget_notifies_slack_through_logs" {
   }
 
   assert {
-    condition = (
-      google_billing_budget.monthly[0].all_updates_rule[0].disable_default_iam_recipients == false &&
-      google_pubsub_topic_iam_member.budget_alerts_billing_publisher[0].member == "serviceAccount:billing-budget-alert@system.gserviceaccount.com"
-    )
-    error_message = "予算通知はPub/Subへ発行し、管理者へのメール通知も残してください。"
-  }
-
-  assert {
-    condition = alltrue([
-      for policy in google_monitoring_alert_policy.budget_threshold :
-      tolist(policy.notification_channels) == tolist(["projects/example-project-123/notificationChannels/1234567890123456789"])
-    ]) && length(google_monitoring_alert_policy.budget_threshold) == 2
-    error_message = "実績・予測の予算アラートを既存のSlackチャネルへ通知してください。"
-  }
-
-  assert {
-    condition     = google_storage_bucket_iam_member.budget_notifier_marker_creator[0].role == "roles/storage.objectCreator"
-    error_message = "通知済み印は作成のみ許可し、上書きや削除で重複判定を壊せないようにしてください。"
+    condition     = length(google_billing_budget.monthly[0].all_updates_rule) == 0
+    error_message = "既定のメール通知だけを使い、追加の通知先を設定しないでください。"
   }
 }
 
