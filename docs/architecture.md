@@ -23,6 +23,7 @@
 
 - 利用するGCP API
 - 本番専用custom-mode VPC、Cloud Run用サブネット、Memorystore調査VM用サブネット
+- Cloud SQL・Memorystore用のPrivate Service Access予約レンジとpeering
 - Cloud SQL for PostgreSQL
 - Memorystore for Redis
 - Memorystoreを読み取り調査する最小スペックのCompute Engine VM
@@ -172,11 +173,13 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 
 ## ネットワーク
 
-- Cloud SQLはCloud Run組み込み接続を利用する
-- Redisは本番専用のcustom-mode VPC内に配置する
-- Redisを利用するAPIと、candlesを実行できる単一batch Jobが同じ専用subnetからDirect VPC egressを利用する
+- Cloud SQLとRedisはPrivate Service Access（PSA）の予約レンジ1つを共用し、本番専用VPCとpeeringする
+- Cloud SQLはpublic IPと承認ネットワークを持たず、`ssl_mode = ENCRYPTED_ONLY`で平文接続を拒否する
+- backendは`INSTANCE_CONNECTION_NAME`と`DB_IP_TYPE=PRIVATE`を受け取り、Cloud SQL Go Connectorでprivate IPの3307へ接続する。ConnectorはmTLSと`roles/cloudsql.client`によるIAM認可を行う
+- API、batch Job、migrate Jobが同じ専用subnetからDirect VPC egressを利用する
 - subnetはCloud RunのIP予約とRevision切り替えを考慮し、最低でも`/26`を確保する
-- API Revisionとbatch Executionに専用network tagを付け、egress firewallは新RedisのTCP portだけを許可する
+- API RevisionとJob Executionに`<prefix>-backend` network tagを付け、egress firewallはCloud SQLの3307とRedisのTCP portだけを各private IPの`/32`宛てに許可する
+- ConnectorのCloud SQL Admin API呼び出しやVertex AI等のpublic APIは`PRIVATE_RANGES_ONLY`によりVPCを通らない
 - 専用VPCは暗黙のegress allowに依存せず、上記以外のVPC向け通信を優先度の低いdeny ruleで拒否する
 - 調査VMはCloud Run用`/26`を消費しない専用`/29`へ配置し、`e2-micro`、外部IPなし、サービスアカウントなしとする
 - 調査VMへのSSHはIAP TCP forwardingとOS Loginに限定し、egressはRedisのTCP port以外を拒否する
@@ -184,10 +187,13 @@ Terraformは`slack_notification_channel_id`に設定したresource nameだけを
 - 常時稼働コストが発生するServerless VPC Accessコネクタは使用しない
 - RedisはVPC内通信に限定し、AUTHを有効にする
 
-Cloud Run Service / batch Jobは常に専用VPC、subnet、network tagを使用し、
-`REDIS_DEDICATED_*` Secretの数値versionからRedisへ接続する。default VPCと旧`REDIS_*`は
-定常構成に含めない。ネットワークやRedisを再移行する場合は通常変更に混ぜず、停止時間、
+Cloud Run Service / Jobは常に専用VPC、subnet、network tagを使用し、
+`REDIS_*` Secretの数値versionからRedisへ接続する。Cloud SQLの`private_network`は一度設定すると
+外せない。ネットワークやRedisを再移行する場合は通常変更に混ぜず、停止時間、
 state address、データの扱い、rollback方法を含む独立した計画を作成する。
+
+運用者がDBを確認する場合はCloud SQL Studioを使う。public IPを持たないため、ローカル端末から
+直接接続しない。
 
 Memorystore調査VMは運用者が必要な期間だけ使用する。接続権限は既存のIAMで個別に管理し、
 Terraformから不特定の利用者へOS LoginやIAPのロールを付与しない。

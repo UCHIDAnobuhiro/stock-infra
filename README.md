@@ -23,9 +23,10 @@ flowchart LR
     CLIENT["API client"] -->|"HTTPS"| LB["External Application Load Balancer"]
     LB -->|"Serverless NEG"| RUN
     RUN -->|"runtime identity"| RUNTIME["Runtime service accounts"]
-    RUNTIME --> SQL["Cloud SQL for PostgreSQL"]
     RUNTIME -->|"Direct VPC egress / network tag"| VPC["Dedicated production VPC"]
-    VPC -->|"TCP Redis only"| REDIS["Memorystore for Redis"]
+    VPC -->|"Private Service Access / Cloud SQL Connector 3307"| SQL["Cloud SQL for PostgreSQL (private IP only)"]
+    VPC -->|"Private Service Access / Redis TCP"| REDIS["Memorystore for Redis"]
+    OPERATOR -->|"Cloud SQL Studio"| SQL
     OPERATOR["Operator"] -->|"IAP SSH / OS Login"| INSPECTOR["Memorystore inspector VM"]
     INSPECTOR -->|"Read-only commands / AUTH"| REDIS
     RUNTIME --> SECRETS["Secret Manager"]
@@ -112,9 +113,11 @@ DNSと証明書の疎通確認後にCloud Runのingressをロードバランサ�
 
 ### 本番専用VPC
 
-Cloud RunとRedisは本番専用のcustom-mode VPCへ配置し、Direct VPC egressのnetwork tagに対する
-egress firewallでRedisのTCP portだけを許可します。default VPCは本番ランタイムから利用せず、
-Redis接続情報は`REDIS_DEDICATED_*` Secretの数値versionへ固定します。
+Cloud Runは本番専用のcustom-mode VPCからDirect VPC egressを使い、Cloud SQLとRedisは
+Private Service Access（PSA）の予約レンジでVPCへ接続します。Cloud SQLはpublic IPを持たず、
+backendはCloud SQL Go Connectorでprivate IPの3307へmTLS接続します。Direct VPC egressの
+network tagに対するegress firewallで、Cloud SQLの3307とRedisのTCP portだけを許可します。
+Redis接続情報は`REDIS_*` Secretの数値versionへ固定します。
 Memorystoreの調査VMはCloud Run用subnetを消費しない専用`/29`へ配置し、外部IPと
 サービスアカウントを持たせず、IAP経由のSSHとRedis宛て通信だけを許可します。
 ネットワーク変更時の確認手順は [docs/operations.md](docs/operations.md) に記載しています。
